@@ -9,7 +9,7 @@ struct CannedVlmEngine: VlmEngine {
     func infer(frame: Frame?, prompt: String) throws -> VlmResult {
         Thread.sleep(forTimeInterval: 0.3)
         if prompt.contains("JSON") {
-            return VlmResult(text: #"{"food":true,"name":"salmon with rice and broccoli","kcal":620,"protein_g":42}"#)
+            return VlmResult(text: #"{"is_food":true,"name":"salmon with rice and broccoli","kcal":620,"protein_g":42}"#)
         }
         return VlmResult(text: frame == nil ? "I can't see anything right now." : "A plate with salmon, rice and broccoli on a table.")
     }

@@ -138,3 +138,13 @@ final class ControllerTests: XCTestCase {
         XCTAssertTrue(m.contains("frame 0 ms old") && !m.contains("-"), m)
     }
 }
+
+/// Regression (2026-10-10): the app's CannedVlmEngine emitted {"food":true,…}; MealParser requires "is_food".
+final class CannedMealContractTests: XCTestCase {
+    func testCannedMealJsonParses() {
+        let canned = #"{"is_food":true,"name":"salmon with rice and broccoli","kcal":620,"protein_g":42}"#
+        let e = MealParser.parse(canned, nowMs: 1, frameTimeMs: 0)
+        XCTAssertEqual(e?.name, "salmon with rice and broccoli"); XCTAssertEqual(e?.kcal, 620)
+        XCTAssertNil(MealParser.parse(#"{"food":true,"name":"x"}"#, nowMs: 1, frameTimeMs: 0))
+    }
+}

@@ -71,6 +71,9 @@ final class GlanceModel: ObservableObject {
     private var rig: GlassesRig?
     #if DEBUG
     private var mock: MockRig?
+    private var fake: FakeRig?
+    /// `--fake-glasses`: no DAT link (CI fallback). HUD renders on the phone only; frames come from FakeRig.
+    let fakeGlasses = ProcessInfo.processInfo.arguments.contains("--fake-glasses")
     #endif
 
     @Published var mockDeviceId = ""
@@ -82,6 +85,9 @@ final class GlanceModel: ObservableObject {
 
     func start(useMock: Bool) {
         guard !started else { step("already started"); return }
+        #if DEBUG
+        if fakeGlasses { startFake(); return }
+        #endif
         // (Removed: enabling MockDeviceKit when DAT is unconfigured — run 38109145843 showed MDK.enable itself traps then.)
         guard DatBoot.ok else {   // touching Wearables.shared now would trap inside MWDATCore
             step("Start failed: DAT configure: \(DatBoot.error ?? "unknown")"); hudLabel = "Error"; hudText = status; return
@@ -123,6 +129,30 @@ final class GlanceModel: ObservableObject {
         }
     }
 
+    #if DEBUG
+    private func startFake() {
+        started = true
+        let hud = TeeHud { [weak self] s in
+            let (_, body, meta) = DatHudRenderer.lines(s)
+            Task { @MainActor in self?.hudLabel = s.label; self?.hudText = body; self?.hudMeta = meta }
+        }
+        let frames = BufferedFrameSource(buffer: buffer, clock: SystemClock(), fallback: nil)
+        let ctl = GlanceController(router: IntentRouter(), buffer: buffer, frames: frames, vlm: CannedVlmEngine(),
+                                   hud: hud, speaker: speaker, mealLog: meals, clock: SystemClock(), streamLive: true)
+        controller = ctl
+        let f = FakeRig(); fake = f; f.start(buffer: buffer)
+        step("Fake glasses connected")
+        queue.asyncAfter(deadline: .now() + 1.2) { ctl.showIdle() }   // after ≥2 frames are buffered
+    }
+    #endif
+
+    /// Speech-equivalent path (partial then final transcript) without DAT Speech — used by the fake-glasses tests.
+    func say(_ text: String) {
+        guard let ctl = controller else { return }
+        let first = String(text.split(separator: " ").first ?? "")
+        queue.async { ctl.onTranscription(first, isFinal: false); ctl.onTranscription(text, isFinal: true) }
+    }
+
     func command(_ text: String) {
         guard let ctl = controller else { return }
         queue.async { ctl.onTranscription(text, isFinal: true) }
@@ -161,6 +191,10 @@ struct ContentView: View {
             HStack {
                 Button("What am I seeing") { m.command("what am I seeing") }.accessibilityIdentifier("cmdDescribe")
                 Button("Log this meal") { m.command("log this meal") }.accessibilityIdentifier("cmdLog")
+            }
+            HStack {
+                Button("Say: what am I seeing") { m.say("what am I seeing") }.accessibilityIdentifier("sayDescribe")
+                Button("Say: log this meal") { m.say("log this meal") }.accessibilityIdentifier("sayLog")
             }
         }.padding()
     }

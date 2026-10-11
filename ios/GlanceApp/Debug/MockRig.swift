@@ -22,15 +22,17 @@ final class MockRig: @unchecked Sendable {
         let kit = MockDeviceKit.shared
         step("MDK enable")
         if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true)) }
-        step("MDK pair metaRayBanDisplay")
-        let g = try kit.pairGlasses(model: .metaRayBanDisplay)
-        // Step 1 (2026-10-10 21:55): BirdSpotter order powerOn → unfold → don, with devicesStream() subscribed since launch (DatBoot).
-        g.powerOn(); g.unfold(); g.don()
+        // Step 2 (2026-10-10 22:20): pair + powerOn/unfold/don OFF the main actor (step 1 on main: run 38112910442, still
+        // disconnected/undefined), then listen for link/compat changes instead of only polling.
+        step("MDK pair metaRayBanDisplay (detached)")
+        let g = try await Task.detached { () throws -> any MockGlasses in
+            let g = try kit.pairGlasses(model: .metaRayBanDisplay)
+            g.powerOn(); g.unfold(); g.don()
+            return g
+        }.value
         glasses = g; deviceId = g.deviceIdentifier
 
-        // Soft readiness wait (run 38110641886: link stayed .disconnected/compat .undefined for 15 s while unsessioned).
-        // CameraAccessTests just sleeps 1 s and starts a session, so the session reaching .started is the real gate.
-        let ready = await waitReady(g.deviceIdentifier, timeout: .seconds(10), step: step)
+        let ready = await waitReadyListening(g.deviceIdentifier, timeout: .seconds(10), step: step)
         if !ready { step("WARN link not connected yet (\(linkInfo(g.deviceIdentifier))); continuing to session start") }
 
         g.services.speech.setTranscriptionSource(.injected)   // never the live phone mic in tests
@@ -43,17 +45,32 @@ final class MockRig: @unchecked Sendable {
         return SpecificDeviceSelector(device: g.deviceIdentifier)
     }
 
+    /// Waits for the Device object to appear (devicesStream lag ≈ 60–250 ms in CI), attaches link-state + compatibility
+    /// listeners (logged as GlanceDiag), and returns once connected+compatible or on timeout.
     @MainActor
-    private func waitReady(_ id: DeviceIdentifier, timeout: Duration, step: (String) -> Void) async -> Bool {
+    private func waitReadyListening(_ id: DeviceIdentifier, timeout: Duration, step: (String) -> Void) async -> Bool {
         step("MDK wait connected id=\(id) reg=\(String(describing: Wearables.shared.registrationState)) devices=\(Wearables.shared.devices) streamed=\(DatBoot.deviceIds)")
         let clock = ContinuousClock(); let deadline = clock.now.advanced(by: timeout)
-        while clock.now < deadline {
-            if let d = Wearables.shared.deviceForIdentifier(id), d.linkState == .connected, d.compatibility() == .compatible { return true }
-            try? await clock.sleep(for: .milliseconds(100))
+        var device: Device?
+        while clock.now < deadline, device == nil {
+            device = Wearables.shared.deviceForIdentifier(id)
+            if device == nil { try? await clock.sleep(for: .milliseconds(50)) }
         }
-        step("MDK not ready after \(timeout): devices=\(Wearables.shared.devices) streamed=\(DatBoot.deviceIds)")
+        guard let device else { step("MDK no Device object for \(id) after \(timeout)"); return false }
+        step("MDK device visible: link=\(device.linkState) compat=\(device.compatibility())")
+        let (events, cont) = AsyncStream<Void>.makeStream()
+        listenTokens.append(device.addLinkStateListener { st in NSLog("GlanceDiag: MDK linkState → %@", "\(st)"); cont.yield() })
+        listenTokens.append(device.addCompatibilityListener { c in NSLog("GlanceDiag: MDK compatibility → %@", "\(c)"); cont.yield() })
+        let timer = Task { try? await clock.sleep(until: deadline); cont.finish() }
+        defer { timer.cancel() }
+        if device.linkState == .connected, device.compatibility() == .compatible { return true }
+        for await _ in events {
+            if device.linkState == .connected, device.compatibility() == .compatible { cont.finish(); return true }
+        }
+        step("MDK not ready after \(timeout): link=\(device.linkState) compat=\(device.compatibility()) streamed=\(DatBoot.deviceIds)")
         return false
     }
+    private var listenTokens: [any AnyListenerToken] = []
 
     @MainActor
     private func linkInfo(_ id: DeviceIdentifier) -> String {
