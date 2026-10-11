@@ -27,6 +27,19 @@ jobs:
         run: X=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1); sudo xcode-select -s "$X"; xcodebuild -version
       - run: brew install xcodegen
       - run: cd ios/GlanceCore && swift test
+      - name: "Experiment (xcode26 leg only): drop ExternalAccessory keys like Meta's samples"
+        if: matrix.xcode == 'xcode26'
+        run: |
+          # Neither CameraAccess nor DisplayAccess declares these; their mock sessions start on CI (run 38118355688).
+          # Real glasses need com.meta.ar.wearable, so this is a CI/Simulator-only experiment, not a product change.
+          cd ios/GlanceApp
+          plutil -remove UISupportedExternalAccessoryProtocols Info.plist
+          python3 - <<'PY'
+          import plistlib; p='Info.plist'; d=plistlib.load(open(p,'rb'))
+          d['UIBackgroundModes']=[m for m in d['UIBackgroundModes'] if m!='external-accessory']
+          plistlib.dump(d,open(p,'wb'))
+          PY
+          plutil -p Info.plist | grep -iE "accessory|Background" -A5 || true
       - run: cd ios/GlanceApp && xcodegen
       - name: Pick (or create) an iPhone simulator
         id: sim
