@@ -2,6 +2,34 @@
 
 _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not run = 📝._
 
+## Update 2026-10-10 22:45 PT: CI green on an honest fallback gate; DAT mock link still blocked
+**CI now:** `app-simulator` is green and the gate is real:
+- GlanceCore: 11/11 on Linux and macOS.
+- GlanceApp: builds for the Simulator.
+- **`FakeGlassesUITests` 4/4 ✅** (first passing iOS UI tests). Run [38114488227](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38114488227).
+
+`MockLoopUITests` (DAT MockDeviceKit link) still runs on every push, as a **non-gating** step, and is still 0/4.
+
+What the fake-glasses suite covers, and what it doesn't:
+- `--fake-glasses` (DEBUG) starts **no DAT session**. `FakeRig` pushes synthetic 504×896 luma frames at 2 fps into the real `FrameRingBuffer`.
+- The real `GlanceController` / `IntentRouter` / `BufferedFrameSource` / `HudState` → phone HUD run end to end, driven through the UI.
+- Tests: idle shows a Live buffer; the "what am I seeing" command answers; spoken describe answers (partial → final transcript); spoken "log this meal" → Logged.
+- It does **not** test DAT Camera/Speech/Display or the glasses link. Those stay in `MockLoopUITests`, and later on a real iPhone (T2).
+
+**Bug found while building the fallback:** the iOS `CannedVlmEngine` returned `{"food":true,…}`, but `MealParser` requires `"is_food"`. So "log this meal" could never reach Logged on iOS. Fixed, with a regression test (`CannedMealContractTests`).
+
+**Mock-link attempts in this round (all ❌, same symptom: the device is listed, `linkState` stays `disconnected`, `compatibility` stays `undefined`):**
+| # | Attempt | Run | Result |
+|---|---|---|---|
+| 1 | `powerOn → unfold → don` (BirdSpotter) + `devicesStream()` subscribed from launch | [38112910442](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38112910442) | UI 0/4, link `disconnected/undefined` for 10 s |
+| 2 | Pair + powerOn/unfold/don in `Task.detached`; `addLinkStateListener` + `addCompatibilityListener` | [38113596903](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38113596903) | UI 0/4. Listeners fire **once** (`disconnected`, `undefined`) and never again |
+| 3 | `--mock-probe` (DEBUG, launched by CI after the tests, not counted as tests) tried 4 variants for 8 s each: main-actor, detached + listener, **`.rayBanMeta`**, no-arg `MockDeviceKit.enable()` | 38113596903 (Diagnostics step) | all 4: `connected=false link=disconnected compat=undefined devices=1`. **Not RBD-specific, not threading** |
+| 4a | `keychain-access-groups` entitlement like Meta's samples | [38114488227](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38114488227) | no change |
+| 4b | Control: Meta's CameraAccess XCUITest on the same runner | 38114488227 | **did not compile**: the samples on `main` need **Xcode 26.4+** (`isolated deinit`); `app-simulator` uses the macos-15 default **Xcode 16.4** |
+| 4c | Control on `macos-26` + newest Xcode 26: Meta CameraAccess mock-pair test **and** our MockLoopUITests | [38115170427](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38115170427) | pending at 22:55 PT |
+
+**Leading hypothesis:** Xcode/SDK mismatch. DAT 1.0.1 is built for, and its samples documented against, Xcode 26.4+. We link it from Xcode 16.4. It compiles and configures, but the mock link may depend on newer runtime behaviour. Run 4c tests this directly.
+
 ## Update 2026-10-10 21:50 PT: mock-start crash fixed; UI tests still 0/4 (link never connects)
 | Run | Commit | Result | Finding |
 |---|---|---|---|
@@ -25,7 +53,7 @@ _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not r
 
 **Remaining blocker:** the paired mock Ray-Ban Display never reaches `linkState == .connected` / `compatibility == .compatible` on the CI Simulator, so `createSession` → `noEligibleDevice`. GlanceCore stays green (10/10 Linux + macOS).
 
-**Untried candidates (next):**
+**Candidates at 21:50 PT (all tried at 22:45 PT; see the update above):**
 1. `powerOn → unfold → don` **with** devicesStream subscribed. BirdSpotter does unfold; run 38110641886 had unfold but no subscription.
 2. Pair off the main actor (`Task.detached`, as BirdSpotter does: "pairing is the SDK's own work"), and add `device.addLinkStateListener`.
 3. Try `.rayBanMeta` (CameraAccess) to see if it's RBD-specific.

@@ -1,5 +1,7 @@
 # phone/ — Android companion app (M1b/M2 scaffold)
 
+> **Start with the [root README](../README.md)** for build, test, emulator and real-hardware instructions (Android + iOS). This file has Android implementation details.
+
 Android first (see `docs/MILESTONE1_RESEARCH.md` §6).
 
 ```
