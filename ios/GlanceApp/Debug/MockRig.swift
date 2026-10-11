@@ -24,8 +24,8 @@ final class MockRig: @unchecked Sendable {
         if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true)) }
         step("MDK pair metaRayBanDisplay")
         let g = try kit.pairGlasses(model: .metaRayBanDisplay)
-        // Order from Meta's DisplayAccess sample + CameraAccessTests: powerOn → don (no unfold).
-        g.powerOn(); g.don()
+        // Step 1 (2026-10-10 21:55): BirdSpotter order powerOn → unfold → don, with devicesStream() subscribed since launch (DatBoot).
+        g.powerOn(); g.unfold(); g.don()
         glasses = g; deviceId = g.deviceIdentifier
 
         // Soft readiness wait (run 38110641886: link stayed .disconnected/compat .undefined for 15 s while unsessioned).
@@ -59,6 +59,45 @@ final class MockRig: @unchecked Sendable {
     private func linkInfo(_ id: DeviceIdentifier) -> String {
         guard let d = Wearables.shared.deviceForIdentifier(id) else { return "no device; devices=\(Wearables.shared.devices)" }
         return "link=\(d.linkState) compat=\(d.compatibility())"
+    }
+
+    /// DEBUG diagnostic: `simctl launch … --mock-probe` tries several bring-up variants one after another and logs
+    /// "PROBE variant=… connected=… after=…ms link=… compat=…". Run by CI after the UI tests (not counted as tests).
+    static func probe() async {
+        enum V: String, CaseIterable { case mainUnfold, detachedListener, rayBanMeta, enableNoArg }
+        let kit = MockDeviceKit.shared
+        for v in V.allCases {
+            if v == .enableNoArg { kit.enable() } else { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true)) }
+            let model: GlassesModel = v == .rayBanMeta ? .rayBanMeta : .metaRayBanDisplay
+            var token: (any AnyListenerToken)?
+            let g: (any MockGlasses)?
+            if v == .detachedListener {
+                g = await Task.detached { () -> (any MockGlasses)? in
+                    guard let g = try? kit.pairGlasses(model: model) else { return nil }
+                    g.powerOn(); g.unfold(); g.don(); return g
+                }.value
+                if let g, let d = Wearables.shared.deviceForIdentifier(g.deviceIdentifier) {
+                    token = d.addLinkStateListener { st in NSLog("PROBE \(v.rawValue) linkListener=\(st)") }
+                }
+            } else {
+                g = try? kit.pairGlasses(model: model)
+                g?.powerOn(); g?.unfold(); g?.don()
+            }
+            guard let g else { NSLog("PROBE variant=\(v.rawValue) pair FAILED"); await kit.disable(); continue }
+            let clock = ContinuousClock(); let t0 = clock.now; var connected = false
+            while clock.now - t0 < .seconds(8) {
+                if let d = Wearables.shared.deviceForIdentifier(g.deviceIdentifier), d.linkState == .connected { connected = true; break }
+                try? await clock.sleep(for: .milliseconds(100))
+            }
+            let d = Wearables.shared.deviceForIdentifier(g.deviceIdentifier)
+            let elapsed = clock.now - t0
+            let line = "PROBE variant=\(v.rawValue) model=\(model) connected=\(connected) after=\(elapsed) link=\(d.map { "\($0.linkState)" } ?? "nil") compat=\(d.map { "\($0.compatibility())" } ?? "nil") devices=\(Wearables.shared.devices.count)"
+            NSLog("%@", line); print(line)
+            _ = token
+            await kit.unpairDevice(g); await kit.disable()
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        print("PROBE done"); NSLog("PROBE done")
     }
 
     func say(_ text: String) {

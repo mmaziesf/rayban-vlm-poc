@@ -76,6 +76,13 @@ jobs:
           kill "$(cat diag/logstream.pid 2>/dev/null)" 2>/dev/null || true
           grep -aE "GlanceDiag|GlanceHud|MWDAT|Fatal|assert" diag/app.log | tail -200 || true
           echo "::endgroup::"
+          echo "::group::Mock bring-up probe (--mock-probe; diagnostic, not a test)"
+          UDID='${{ steps.sim.outputs.udid }}'
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          xcrun simctl terminate "$UDID" dev.arash.GlanceApp 2>/dev/null || true
+          ( timeout 75 xcrun simctl launch --console-pty "$UDID" dev.arash.GlanceApp --mock-probe > diag/probe.log 2>&1 || true )
+          grep -a "PROBE" diag/probe.log || { echo "no PROBE lines"; tail -40 diag/probe.log; }
+          echo "::endgroup::"
           xcrun xcresulttool export attachments --path UITests.xcresult --output-path diag/attachments >/dev/null 2>&1 || true
       - uses: actions/upload-artifact@v4
         if: always()

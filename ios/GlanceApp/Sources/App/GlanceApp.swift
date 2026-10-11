@@ -7,7 +7,12 @@ import GlanceCore
 @main
 struct GlanceAppMain: App {
     @StateObject private var model = GlanceModel()
-    init() { DatBoot.configure() }
+    init() {
+        DatBoot.configure()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--mock-probe"), DatBoot.ok { Task { await MockRig.probe() } }
+        #endif
+    }
     var body: some Scene {
         WindowGroup {
             ContentView().environmentObject(model)
