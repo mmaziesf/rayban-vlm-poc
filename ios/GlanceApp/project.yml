@@ -28,6 +28,12 @@ targets:
     type: bundle.ui-testing
     platform: iOS
     sources: [UITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES   # required once code signing is on (run 38109885287)
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
     dependencies:
       - target: GlanceApp
       - { package: MWDAT, product: MWDATMockDeviceTestClient }
