@@ -144,6 +144,8 @@ fun main() {
         check("vlm: low RAM → stub", low.mode == VlmSelection.Mode.STUB && low.reason.contains("low RAM"), low)
     }
 
+    hplTests { n, c, i -> check(n, c, i) }
+
     println("\n$passes passed, $failures failed")
     if (failures > 0) kotlin.system.exitProcess(1)
 }

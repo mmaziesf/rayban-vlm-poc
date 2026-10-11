@@ -33,6 +33,10 @@ class MainActivity : ComponentActivity() {
         status = TextView(this)
         val ui = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 32) }
         ui.addView(status)
+        ui.addView(Button(this).apply {
+            text = "HP Lifestyle: pair / send meals"
+            setOnClickListener { startActivity(Intent(this@MainActivity, glance.app.hpl.HplActivity::class.java)) }
+        })
         setContentView(ui)
 
         Wearables.initialize(this)

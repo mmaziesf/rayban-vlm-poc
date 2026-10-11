@@ -20,5 +20,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- HP Lifestyle bridge (docs/HPL_BRIDGE.md): pairing link + signed .hplevent export via the share sheet. Offline. -->
+        <activity android:name=".hpl.HplActivity" android:exported="true" android:launchMode="singleTop" android:label="HP Lifestyle">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hplpair" android:host="v1" />
+            </intent-filter>
+        </activity>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.hplfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/hpl_file_paths" />
+        </provider>
     </application>
 </manifest>

@@ -34,6 +34,7 @@ At that point the probes still differed from the sample only in *project generat
 **CI now:**
 - Gate on **both** matrix legs (Xcode 16.4 and 26.6): GlanceCore + build (+ plist check) + **MockLoopUITests** + FakeGlassesUITests (backup gate, runs even if the mock step fails).
 - Follow-up race fix: run [38126926753](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38126926753) went 3/4 on Xcode 26 (`testSpeechDescribeUsesBufferedFrame`: "session did not reach .started (state=started)"). `stateStream()` doesn't replay the current state, so `.started` could arrive between the check and the subscription. `GlassesRig.waitForStarted` now also polls `session.state`.
+- Second race, run [38128195912](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38128195912), Xcode 16.4, `testSpeechLogMealLogs`: status was `session state: started` instead of "Mock glasses connected". Rig progress hops to the main actor asynchronously and could overwrite the final status. Fix: after the app reports connected, rig progress is log-only, except session errors and `stopped`.
 - The `mock-bisect` job and `ios/MockProbe` are removed.
 - **Still open:** real iPhone + glasses, and the iOS on-device VLM (stub).
 

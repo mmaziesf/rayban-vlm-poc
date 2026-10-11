@@ -5,7 +5,7 @@ import android.util.Log
 import com.meta.wearable.dat.core.selectors.DeviceSelector
 import glance.app.audio.AndroidSpeaker
 import glance.app.dat.GlassesRig
-import glance.app.log.MemoryMealLog
+import glance.app.hpl.MealStoreHolder
 import glance.app.vlm.CannedVlmEngine
 import glance.core.*
 import kotlinx.coroutines.CoroutineScope
@@ -56,7 +56,7 @@ object GlanceGraph {
         )
         c = GlanceController(
             IntentRouter(), buffer, BufferedFrameSource(buffer, clock, rig.captureFallback(), maxAgeMs = 1500),
-            vlm, LoggingHud(dat, hudSink), speaker, MemoryMealLog(), clock, streamFps = rig.streamFps,
+            vlm, LoggingHud(dat, hudSink), speaker, MealStoreHolder.get(context), clock, streamFps = rig.streamFps,
         )
         rig.controller = c
         this.rig = rig; controller = c

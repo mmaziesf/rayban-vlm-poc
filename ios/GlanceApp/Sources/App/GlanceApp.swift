@@ -86,6 +86,13 @@ final class GlanceModel: ObservableObject {
     /// Every step is NSLog'd ("GlanceDiag: …", visible in `log show` on CI) and shown in `status`;
     /// any failure lands on the HUD as Error instead of crashing.
     private func step(_ s: String) { NSLog("GlanceDiag: %@", s); status = s }
+    /// Rig progress arrives via async main-actor hops, so it can land AFTER the final "connected" status. Once ready, only
+    /// log it, unless it reports trouble (run 38128195912: a late "session state: started" overwrote "Mock glasses connected").
+    private var ready = false
+    private func progress(_ s: String) {
+        if ready && !(s.hasPrefix("session error") || s.contains("stopped")) { NSLog("GlanceDiag: %@", s); return }
+        step(s)
+    }
 
     func start(useMock: Bool) {
         guard !started else { step("already started"); return }
@@ -120,14 +127,16 @@ final class GlanceModel: ObservableObject {
                 }
                 #endif
                 // @Sendable + explicit main-actor hop: a MainActor-inferred closure called off-main traps at runtime (dispatch_assert_queue).
-                try await rig.start(selector: selector, step: { s in Task { @MainActor [weak self] in self?.step(s) } }) { text, fin, conf in
+                try await rig.start(selector: selector, step: { s in Task { @MainActor [weak self] in self?.progress(s) } }) { text, fin, conf in
                     queue.async { ctl.onTranscription(text, isFinal: fin, confidence: conf) }
                 }
                 hud.glasses = rig.hud
                 ctl.streamLive = true
+                ready = true
                 step(useMock ? "Mock glasses connected" : "Glasses session started")
                 queue.async { ctl.showIdle() }
             } catch {
+                ready = false
                 step("Start failed: \(error)")
                 hudLabel = "Error"; hudText = "\(error)"
                 started = false
@@ -164,7 +173,7 @@ final class GlanceModel: ObservableObject {
         queue.async { ctl.onTranscription(text, isFinal: true) }
     }
 
-    func stop() { rig?.stop(); controller?.streamLive = false; status = "Stopped" }
+    func stop() { rig?.stop(); controller?.streamLive = false; ready = false; status = "Stopped" }
 
     /// Debug-only analogue of the Android ADB broadcast: xcrun simctl openurl booted 'glance-debug://command?text=what%20am%20I%20seeing'
     func handleDebugURL(_ url: URL) -> Bool {
