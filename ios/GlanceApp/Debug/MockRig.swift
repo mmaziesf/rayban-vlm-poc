@@ -70,6 +70,50 @@ final class MockRig: @unchecked Sendable {
         }
     }
 
+    // MARK: - XCUITest mode (`--ui-testing`), mirrors Meta's CameraAccess sample + CameraAccessUITests
+
+    static let uiTesting = ProcessInfo.processInfo.arguments.contains("--ui-testing")
+
+    /// Called from DatBoot right after Wearables.configure(), before any other Wearables.shared use (as CameraAccessApp.init).
+    static func bootForUITesting() {
+        let kit = MockDeviceKit.shared
+        if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: false, initialPermissionsGranted: true)) }
+        let portFile = ProcessInfo.processInfo.environment["MWDAT_TEST_SERVER_PORT_FILE"]
+        Task {
+            do { let port = try await kit.startTestServer(portFilePath: portFile); NSLog("GlanceDiag: MDK test server :%d portFile=%@", Int(port), portFile ?? "-") }
+            catch { NSLog("GlanceDiag: WARN test server: %@", "\(error)") }
+        }
+        NSLog("GlanceDiag: MDK enabled for UI testing (unregistered)")
+    }
+
+    /// Start (mock) in UI-testing mode: register through the SDK (MDK fake handler), then wait for the device that the
+    /// TEST process pairs via MockDeviceTestClient.pairDevice() to become active on an AutoDeviceSelector.
+    @MainActor
+    func startForUITesting(timeout: Duration = .seconds(90), step: (String) -> Void) async throws -> any DeviceSelector {
+        let kit = MockDeviceKit.shared
+        if Wearables.shared.registrationState != .registered {
+            step("MDK startRegistration (state=\(Wearables.shared.registrationState))")
+            do { try await Wearables.shared.startRegistration() } catch { step("WARN startRegistration: \(error)") }
+            let clock = ContinuousClock(); let deadline = clock.now.advanced(by: .seconds(15))
+            while Wearables.shared.registrationState != .registered, clock.now < deadline { try? await clock.sleep(for: .milliseconds(100)) }
+        }
+        let auto = AutoDeviceSelector(wearables: Wearables.shared)
+        step("Waiting for test-paired glasses")   // UI test pairs when it sees this exact status
+        guard let id = await Self.firstActiveDevice(auto, timeout: timeout) else {
+            let devs = Wearables.shared.devices.map { id in Wearables.shared.deviceForIdentifier(id).map { "\(id)=\($0.linkState)/\($0.compatibility())" } ?? "\(id)=?" }
+            throw MockRigError.notReady(link: "no active device; registration=\(Wearables.shared.registrationState) devices=\(devs) paired=\(kit.pairedDevices.count)", compat: "-")
+        }
+        deviceId = id
+        step("MDK active device \(id)")
+        if let g = kit.pairedDevices.compactMap({ $0 as? any MockGlasses }).first(where: { $0.deviceIdentifier == id }) {
+            glasses = g
+            g.services.speech.setTranscriptionSource(.injected)
+            if let feed = Bundle.main.url(forResource: "mock_feed_hevc", withExtension: "mp4") { g.services.camera.setCameraFeed(fileURL: feed) }
+            if let jpg = Bundle.main.url(forResource: "mock_photo_meal", withExtension: "jpg") { g.services.camera.setCapturedImage(fileURL: jpg) }
+        } else { step("WARN active device is not an in-process MockGlasses (feeds not set)") }
+        return auto
+    }
+
     /// Waits for the Device object to appear (devicesStream lag ≈ 60–250 ms in CI), attaches link-state + compatibility
     /// listeners (logged as GlanceDiag), and returns once connected+compatible or on timeout.
     @MainActor

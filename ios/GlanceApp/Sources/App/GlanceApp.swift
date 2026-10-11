@@ -1,5 +1,4 @@
-// ⚠️ STRUCTURAL / UNVERIFIED: written on Linux against the DAT 1.0.1 .swiftinterface files; never compiled
-// (MWDAT* are iOS-only binary xcframeworks). First compile happens on macOS (see ios/README.md / docs/IOS_OPTIONS.md).
+// Written on Linux against the DAT 1.0.1 .swiftinterface files; compiled on GitHub Actions (Xcode 16.4 + 26.6).
 import SwiftUI
 import MWDATCore
 import GlanceCore
@@ -36,6 +35,11 @@ enum DatBoot {
         catch let e as WearablesError where e == .alreadyConfigured { ok = true }
         catch { self.error = "\(error) (\(String(reflecting: error)))"; ok = false }
         NSLog("GlanceDiag: Wearables.configure ok=%@ error=%@", "\(ok)", error ?? "-")
+        #if DEBUG
+        // XCUITest mode, same order as Meta's CameraAccessApp.init: configure → MDK enable + test server → only then
+        // anything else touches Wearables.shared. The UI test pairs the device itself via MockDeviceTestClient.
+        if ok, MockRig.uiTesting { MockRig.bootForUITesting() }
+        #endif
         if ok { observeDevices() }
     }
 
@@ -109,7 +113,9 @@ final class GlanceModel: ObservableObject {
                 #if DEBUG
                 if useMock {
                     let m = MockRig(); mock = m
-                    selector = try await m.startAndAwait { [weak self] in self?.step($0) }
+                    selector = MockRig.uiTesting
+                        ? try await m.startForUITesting { [weak self] in self?.step($0) }
+                        : try await m.startAndAwait { [weak self] in self?.step($0) }
                     mockDeviceId = m.deviceId ?? ""
                 }
                 #endif
