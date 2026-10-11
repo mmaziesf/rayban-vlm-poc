@@ -24,28 +24,40 @@ final class MockRig: @unchecked Sendable {
         if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true)) }
         step("MDK pair metaRayBanDisplay")
         let g = try kit.pairGlasses(model: .metaRayBanDisplay)
-        g.powerOn(); g.unfold(); g.don()
+        // Order from Meta's DisplayAccess sample + CameraAccessTests: powerOn → don (no unfold).
+        g.powerOn(); g.don()
+        glasses = g; deviceId = g.deviceIdentifier
+
+        // Soft readiness wait (run 38110641886: link stayed .disconnected/compat .undefined for 15 s while unsessioned).
+        // CameraAccessTests just sleeps 1 s and starts a session, so the session reaching .started is the real gate.
+        let ready = await waitReady(g.deviceIdentifier, timeout: .seconds(5), step: step)
+        if !ready { step("WARN link not connected yet (\(linkInfo(g.deviceIdentifier))); continuing to session start") }
+
         g.services.speech.setTranscriptionSource(.injected)   // never the live phone mic in tests
         if let feed = Bundle.main.url(forResource: "mock_feed_hevc", withExtension: "mp4") { g.services.camera.setCameraFeed(fileURL: feed) }
         else { step("WARN mock_feed_hevc.mp4 missing from bundle") }
         if let jpg = Bundle.main.url(forResource: "mock_photo_meal", withExtension: "jpg") { g.services.camera.setCapturedImage(fileURL: jpg) }
-        glasses = g; deviceId = g.deviceIdentifier
-
-        step("MDK wait connected id=\(g.deviceIdentifier)")
-        let clock = ContinuousClock(); let deadline = clock.now.advanced(by: timeout)
-        while true {
-            let d = Wearables.shared.deviceForIdentifier(g.deviceIdentifier)
-            if let d, d.linkState == .connected, d.compatibility() == .compatible { break }
-            if clock.now >= deadline {
-                throw MockRigError.notReady(link: d.map { String(describing: $0.linkState) } ?? "no device",
-                                            compat: d.map { String(describing: $0.compatibility()) } ?? "-")
-            }
-            try await clock.sleep(for: .milliseconds(100))
-        }
         // Test server for XCUITest MockDeviceTestClient / Chrome preview. Non-fatal (like Android).
         do { let port = try await kit.startTestServer(port: 9000); step("MDK test server :\(port)") }
         catch { step("WARN test server: \(error)") }
         return SpecificDeviceSelector(device: g.deviceIdentifier)
+    }
+
+    @MainActor
+    private func waitReady(_ id: DeviceIdentifier, timeout: Duration, step: (String) -> Void) async -> Bool {
+        step("MDK wait connected id=\(id) reg=\(String(describing: Wearables.shared.registrationState)) devices=\(Wearables.shared.devices)")
+        let clock = ContinuousClock(); let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if let d = Wearables.shared.deviceForIdentifier(id), d.linkState == .connected, d.compatibility() == .compatible { return true }
+            try? await clock.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
+    @MainActor
+    private func linkInfo(_ id: DeviceIdentifier) -> String {
+        guard let d = Wearables.shared.deviceForIdentifier(id) else { return "no device; devices=\(Wearables.shared.devices)" }
+        return "link=\(d.linkState) compat=\(d.compatibility())"
     }
 
     func say(_ text: String) {

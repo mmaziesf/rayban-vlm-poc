@@ -32,6 +32,9 @@ final class GlassesRig: @unchecked Sendable {
                onTranscript: @escaping @Sendable (String, Bool, Float) -> Void) async throws {
         let s = try Wearables.shared.createSession(deviceSelector: selector)
         session = s
+        let errs = s.errorStream()
+        Task { for await e in errs { step("session error: \(e)") } }
+        Task { for await st in s.stateStream() { step("session state: \(st)"); if st == .stopped { break } } }
         step("session start")
         try s.start()
         let started = await Self.waitForStarted(s, timeout: .seconds(15))
