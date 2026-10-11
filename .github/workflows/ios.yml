@@ -121,3 +121,45 @@ jobs:
             ios/GlanceApp/diag
             ios/GlanceApp/UITests.xcresult
             ios/GlanceApp/FakeUITests.xcresult
+  mock-bisect:           # DIAGNOSTIC (non-gating): ios/MockProbe built 4× with different DAT products (Lite = sample-like
+    runs-on: macos-26    # Core+Camera+MockDevice; +Display; +Speech; Full = GlanceApp's set). Does linkage break mock connect?
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode 26
+        run: X=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1); sudo xcode-select -s "$X"; xcodebuild -version
+      - run: brew install xcodegen && cd ios/MockProbe && xcodegen
+      - name: Pick + boot an iPhone simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          c=[(r,x) for r,xs in d.items() if "iOS" in r for x in xs if x["name"].startswith("iPhone")]
+          c.sort(key=lambda t:(t[0],t[1]["name"]))
+          print(c[-1][1]["udid"] if c else "")')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID" || true; xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+      - name: Run variants
+        run: |
+          cd ios/MockProbe
+          for v in Lite Display Speech Full; do
+            echo "::group::Probe$v"
+            xcodebuild test -project MockProbe.xcodeproj -scheme Probe$v -destination "id=${{ steps.sim.outputs.udid }}" \
+              -resultBundlePath $GITHUB_WORKSPACE/Probe$v.xcresult \
+              CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES > $GITHUB_WORKSPACE/probe-$v.log 2>&1
+            rc=$?
+            grep -E "error:" $GITHUB_WORKSPACE/probe-$v.log | grep -v "XCTAssert" | sort -u | head -20
+            echo "::endgroup::"
+            r=$(xcrun xcresulttool get test-results summary --path $GITHUB_WORKSPACE/Probe$v.xcresult --compact 2>/dev/null | python3 -c 'import json,sys
+          try:
+            d=json.load(sys.stdin); f=[x["failureText"][:400] for x in d.get("testFailures",[])]
+            print("passed=%s failed=%s %s"%(d.get("passedTests"),d.get("failedTests")," | ".join(f)))
+          except Exception as e: print("no xcresult")')
+            echo "BISECT Probe$v rc=$rc $r"
+            grep -ao "PROBE_RESULT[^\"]*" $GITHUB_WORKSPACE/probe-$v.log | head -3
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: mock-bisect-logs, path: "probe-*.log" }
