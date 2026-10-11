@@ -32,7 +32,7 @@ final class MockRig: @unchecked Sendable {
         }.value
         glasses = g; deviceId = g.deviceIdentifier
 
-        let ready = await waitReadyListening(g.deviceIdentifier, timeout: .seconds(10), step: step)
+        let ready = await waitReadyListening(g.deviceIdentifier, timeout: .seconds(5), step: step)
         if !ready { step("WARN link not connected yet (\(linkInfo(g.deviceIdentifier))); continuing to session start") }
 
         g.services.speech.setTranscriptionSource(.injected)   // never the live phone mic in tests
@@ -42,7 +42,22 @@ final class MockRig: @unchecked Sendable {
         // Test server for XCUITest MockDeviceTestClient / Chrome preview. Non-fatal (like Android).
         do { let port = try await kit.startTestServer(port: 9000); step("MDK test server :\(port)") }
         catch { step("WARN test server: \(error)") }
-        return SpecificDeviceSelector(device: g.deviceIdentifier)
+        // Like Meta's CameraAccess sample (whose mock-pair UI test passes on CI): AutoDeviceSelector + activeDeviceStream(),
+        // instead of SpecificDeviceSelector gated on linkState (which never leaves .disconnected here; runs 38112910442…38117301155).
+        let auto = AutoDeviceSelector(wearables: Wearables.shared)
+        let active = await Self.firstActiveDevice(auto, timeout: .seconds(10))
+        step("MDK auto selector active=\(active.map { "\($0)" } ?? "nil") (paired \(g.deviceIdentifier))")
+        return auto
+    }
+
+    private static func firstActiveDevice(_ sel: AutoDeviceSelector, timeout: Duration) async -> DeviceIdentifier? {
+        await withTaskGroup(of: DeviceIdentifier?.self) { group in
+            group.addTask { for await id in sel.activeDeviceStream() { if let id { return id } }; return nil }
+            group.addTask { try? await Task.sleep(for: timeout); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 
     /// Waits for the Device object to appear (devicesStream lag ≈ 60–250 ms in CI), attaches link-state + compatibility
