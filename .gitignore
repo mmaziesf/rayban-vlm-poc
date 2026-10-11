@@ -1,0 +1,18 @@
+node_modules/
+phone/core/build/
+artifacts/
+phone/.gradle/
+phone/**/build/
+phone/local.properties
+# Build / IDE
+ios/GlanceCore/.build/
+**/.DS_Store
+*.iml
+.idea/
+.cxx/
+phone/app/build/
+phone/app/.cxx/
+tools/node_modules/
+# SDK local
+*.keystore
+*.jks

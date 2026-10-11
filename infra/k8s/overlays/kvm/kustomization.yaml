@@ -1,0 +1,31 @@
+# KVM variant. Requires nodes that really expose /dev/kvm:
+#  GKE:  gcloud container node-pools create emu --cluster=C --machine-type=n2-standard-8 --image-type=UBUNTU_CONTAINERD \
+#          --enable-nested-virtualization --node-labels=nested-virtualization=enabled
+#  or bare metal (EKS *.metal, Hetzner/OVH dedicated). Never on the bot box (nested KVM oopses its kernel).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - target: { kind: Deployment, name: emulator }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: "on"
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value: { nested-virtualization: enabled }
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value: { privileged: true }   # per GKE nested-virt docs; alternative: kubevirt KVM device plugin (devices.kubevirt.io/kvm: 1)
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value: [{ name: kvm, mountPath: /dev/kvm }]
+      - op: add
+        path: /spec/template/spec/volumes
+        value: [{ name: kvm, hostPath: { path: /dev/kvm, type: CharDevice } }]
+  - target: { kind: Job, name: glance-test }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: "1"

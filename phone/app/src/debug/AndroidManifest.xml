@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Debug-only: Mock Device Kit test server (Chrome simulator preview on :9000) needs a socket.
+         Release has NO INTERNET permission (offline proof). Found on the TCG emulator 2026-10-10: EPERM without it. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application>
+        <!-- Debug-only: bot-triggered turns. Sender must hold DUMP (adb shell has it; normal apps do not). -->
+        <receiver
+            android:name="glance.app.debug.DebugCommandReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="dev.arash.glance.DEBUG_COMMAND" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

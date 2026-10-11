@@ -1,0 +1,33 @@
+# Waits for the emulator Service, installs the APKs from the PVC, runs MockLoopTest + smoke. Results → /work/out/results.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: glance-test
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: test
+          image: glance-android
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              until [ -f /work/out/app-debug-androidTest.apk ]; do echo "waiting for build"; sleep 15; done
+              until adb connect emulator:5555 | grep -q connected && [ "$(adb -s emulator:5555 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 10; done
+              export ANDROID_SERIAL=emulator:5555
+              adb install -r -g /work/out/app-debug.apk && adb install -r -g /work/out/app-debug-androidTest.apk
+              mkdir -p /work/out/results
+              adb shell am instrument -w -r -e timeoutScale "$TIMEOUT_SCALE" -e class glance.app.MockLoopTest \
+                dev.arash.glance.test/androidx.test.runner.AndroidJUnitRunner | tee /work/out/results/instrument.txt
+              grep -q "^OK (" /work/out/results/instrument.txt
+              SMOKE_SLOW="$TIMEOUT_SCALE" /work/repo/tools/adb/smoke.sh "what am I seeing" | tee /work/out/results/smoke.txt
+          env:
+            - { name: TIMEOUT_SCALE, value: "6" }   # 1-2 on a KVM node
+          volumeMounts: [{ name: work, mountPath: /work }]
+      volumes:
+        - name: work
+          persistentVolumeClaim: { claimName: workspace }

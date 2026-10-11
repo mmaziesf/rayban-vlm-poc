@@ -1,0 +1,35 @@
+# Clones the repo, runs core JVM tests, builds debug + androidTest APKs into the PVC.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: glance-build
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: build
+          image: glance-android
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              cd /work && [ -d repo ] || git clone "$REPO_URL" repo
+              cd repo && git fetch -q && git checkout -q "$REPO_REF"
+              phone/core/run-tests.sh
+              cd phone && echo "sdk.dir=$ANDROID_HOME" > local.properties
+              ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+              mkdir -p /work/out && cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /work/out/
+          env:
+            - { name: REPO_URL, value: "https://github.com/OWNER/rayban-vlm-poc.git" }  # placeholder: repo not yet pushed anywhere
+            - { name: REPO_REF, value: "main" }
+            - { name: GRADLE_USER_HOME, value: /work/.gradle }
+          resources:
+            requests: { cpu: "2", memory: 4Gi }
+            limits: { memory: 6Gi }
+          volumeMounts: [{ name: work, mountPath: /work }]
+      volumes:
+        - name: work
+          persistentVolumeClaim: { claimName: workspace }

@@ -1,0 +1,14 @@
+# Base = TCG emulator (any cluster, no privileges). Apply via overlays: kubectl apply -k infra/k8s/overlays/tcg  or  .../overlays/kvm
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: glance-android
+images:
+  - name: glance-android
+    newName: REGISTRY/glance-android   # set to your registry (Artifact Registry / GHCR)
+    newTag: "0.1"
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - build-job.yaml
+  - emulator.yaml
+  - test-job.yaml

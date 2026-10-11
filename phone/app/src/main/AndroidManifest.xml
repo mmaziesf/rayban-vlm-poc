@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Only needed if Mock Device Kit uses the PHONE camera as the mock feed (setCameraFeed(CameraFacing)). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- No INTERNET permission: the design is fully offline.
+         VERIFY: DAT/Meta AI app registration may require additional manifest metadata — copy from the official sample. -->
+    <application android:label="Glance" android:allowBackup="false">
+        <meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID" android:value="${mwdat_application_id}" />
+        <meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN" android:value="${mwdat_client_token}" />
+        <!-- Privacy/offline: DAT 1.0.1 otherwise queues analytics + crash uploads (seen in emulator logcat 2026-10-10). -->
+        <meta-data android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT" android:value="true" />
+        <meta-data android:name="com.meta.wearable.mwdat.CRASH_REPORTING_OPT_OUT" android:value="true" />
+        <!-- LiteRT-LM GPU backend: without these it falls back to Dawn/Vulkan (OOM risk). -->
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

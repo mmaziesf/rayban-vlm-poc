@@ -1,0 +1,37 @@
+{
+  "frame": {
+    "id": "string",
+    "width": 504,
+    "height": 896,
+    "format": "yuv420 | jpeg",
+    "origin": "stream_buffer | photo_capture | test_asset",
+    "captureTimeMs": 0,
+    "sharpness": 0.0
+  },
+  "inferRequest": {
+    "frameId": "string",
+    "command": "describe | log | chat",
+    "text": "optional user utterance"
+  },
+  "inferResponse": {
+    "kind": "describe | log | chat",
+    "text": "short spoken answer (<= 2 sentences)",
+    "ok": "bool (log only)",
+    "entry": {
+      "ts": "ISO-8601",
+      "frameId": "string",
+      "name": "string",
+      "kcal": "number",
+      "protein_g": "number"
+    },
+    "timings_ms": {
+      "capture": 0,
+      "transfer": 0,
+      "vision": 0,
+      "prefill": 0,
+      "decode": 0
+    },
+    "source": "pinned | buffer | capture-fallback",
+    "frameAgeMs": 0
+  }
+}

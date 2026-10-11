@@ -1,0 +1,13 @@
+[versions]
+mwdat = "1.0.1"          # Maven Central, latest release on 2026-10-10
+litertlm = "0.18.0"       # Google Maven, latest on 2026-10-10 (needs Kotlin >= 2.4)
+coroutines = "1.11.0"
+
+[libraries]
+mwdat-core = { group = "com.meta.wearable", name = "mwdat-core", version.ref = "mwdat" }
+mwdat-camera = { group = "com.meta.wearable", name = "mwdat-camera", version.ref = "mwdat" }
+mwdat-display = { group = "com.meta.wearable", name = "mwdat-display", version.ref = "mwdat" }
+mwdat-speech = { group = "com.meta.wearable", name = "mwdat-speech", version.ref = "mwdat" }
+mwdat-mockdevice = { group = "com.meta.wearable", name = "mwdat-mockdevice", version.ref = "mwdat" }
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }

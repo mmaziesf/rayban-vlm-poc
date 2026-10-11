@@ -1,0 +1,35 @@
+# Default = TCG (software) emulator: no /dev/kvm, no privileged, runs on any node with ≥4 CPU / 3 GiB free.
+# Measured on the bot box (2026-10-10, 4 vCPU TCG): boot 191 s, APK install 90 s, MockLoopTest 4/4 in ~100 s.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emulator
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: emulator } }
+  template:
+    metadata: { labels: { app: emulator } }
+    spec:
+      containers:
+        - name: emulator
+          image: glance-android
+          command: ["/usr/local/bin/emulator-entry.sh"]
+          env:
+            - { name: ACCEL, value: "off" }
+            - { name: CORES, value: "4" }
+          ports: [{ name: adb, containerPort: 5556 }]
+          readinessProbe:
+            exec: { command: ["test", "-f", "/tmp/booted"] }
+            periodSeconds: 10
+            failureThreshold: 60   # TCG boot ≈ 3-4 min
+          resources:
+            requests: { cpu: "4", memory: 3Gi }
+            limits: { memory: 4Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emulator
+spec:
+  selector: { app: emulator }
+  ports: [{ name: adb, port: 5555, targetPort: 5556 }]

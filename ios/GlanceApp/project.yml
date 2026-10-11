@@ -1,0 +1,30 @@
+# XcodeGen spec (brew install xcodegen && xcodegen) — UNVERIFIED: authored on Linux, never generated/built.
+name: GlanceApp
+options: { bundleIdPrefix: dev.arash, deploymentTarget: { iOS: "17.0" } }
+packages:
+  MWDAT: { url: https://github.com/facebook/meta-wearables-dat-ios, exactVersion: 1.0.1 }
+  GlanceCore: { path: ../GlanceCore }
+targets:
+  GlanceApp:
+    type: application
+    platform: iOS
+    sources: [Sources, Debug, Resources]   # Debug/ is #if DEBUG; TODO: exclude Resources/mock_* from Release
+    info: { path: Info.plist }
+    dependencies:
+      - package: GlanceCore
+      - { package: MWDAT, product: MWDATCore }
+      - { package: MWDAT, product: MWDATCamera }
+      - { package: MWDAT, product: MWDATDisplay }
+      - { package: MWDAT, product: MWDATSpeech }
+      - { package: MWDAT, product: MWDATMockDevice }   # needed for Debug MockRig
+  GlanceAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: GlanceApp
+      - { package: MWDAT, product: MWDATMockDeviceTestClient }
+schemes:
+  GlanceApp:
+    build: { targets: { GlanceApp: all, GlanceAppUITests: [test] } }
+    test: { targets: [GlanceAppUITests] }

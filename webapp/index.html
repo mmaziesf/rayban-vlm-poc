@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=600, height=600, initial-scale=1.0, user-scalable=no">
+  <meta name="description" content="Glance VLM: ask what you're seeing; answers come from an on-phone model (M1 mock).">
+  <meta name="mrbd-web-app-capable" content="yes">
+  <title>Glance VLM</title>
+  <link rel="icon" href="icon-96.png" sizes="96x96" type="image/png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="hud" aria-live="polite">
+    <!-- Left column: status + answer (non-interactive, glanceable) -->
+    <section class="info">
+      <div class="status-row">
+        <span id="stateDot" class="dot" aria-hidden="true"></span>
+        <span id="stateLabel" class="state">Ready</span>
+        <span id="bufChip" class="chip">Camera off</span>
+      </div>
+      <p id="prompt" class="prompt">Say or pick a command</p>
+      <p id="answer" class="answer"></p>
+      <p id="meta" class="meta"></p>
+    </section>
+
+    <!-- Right column: large D-pad targets -->
+    <nav class="actions" aria-label="Commands">
+      <button id="btnSee" class="focusable" data-action="see">👁 What am I seeing?</button>
+      <button id="btnLog" class="focusable" data-action="log">🍽 Log this meal</button>
+      <button id="btnCam" class="focusable" data-action="cam" aria-pressed="true">📷 Live cam on</button>
+      <button id="btnSpeak" class="focusable" data-action="speak" aria-pressed="true">🔊 Voice on</button>
+    </nav>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
