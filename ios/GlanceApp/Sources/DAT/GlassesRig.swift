@@ -70,8 +70,14 @@ final class GlassesRig: @unchecked Sendable {
         if s.state == .started { return true }
         return await withTaskGroup(of: Bool.self) { g in
             g.addTask { for await st in s.stateStream() { if st == .started { return true }; if st == .stopped { return false } }; return false }
+            // stateStream() doesn't replay the current state: `.started` can land between the check above and the
+            // subscription (Xcode 26 run 38126926753: "did not reach .started (state=started)"). Poll as well.
+            g.addTask {
+                while !Task.isCancelled { if s.state == .started { return true }; try? await Task.sleep(for: .milliseconds(100)) }
+                return false
+            }
             g.addTask { try? await Task.sleep(for: timeout); return false }
-            let r = await g.next() ?? false; g.cancelAll(); return r
+            let r = await g.next() ?? false; g.cancelAll(); return r || s.state == .started
         }
     }
 

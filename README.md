@@ -153,7 +153,7 @@ xcrun simctl openurl booted 'glance-debug://command?text=log%20this%20meal&viaMo
 |---|---|---|
 | `core-linux` | GlanceCore `swift test` on Ubuntu | yes |
 | `app-simulator (xcode16)` | macos-15 / Xcode 16.4. GlanceCore, then XcodeGen + Simulator build (with a check that the built Info.plist has `MWDAT`), then `MockLoopUITests` (DAT MockDeviceKit link) and `FakeGlassesUITests`, plus a `--mock-probe` diagnostic. Uploads xcresult, crash reports and the app log | yes |
-| `app-simulator (xcode26)` | Same steps on macos-26 / Xcode 26.6 | no (experimental) |
+| `app-simulator (xcode26)` | Same steps on macos-26 / Xcode 26.6 | yes |
 
 Both legs pass the DAT mock tests 4/4 (run [38126000773](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38126000773)). The history of the former mock-link blocker is in [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md).
 

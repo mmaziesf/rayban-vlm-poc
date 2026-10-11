@@ -15,8 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { xcode: "xcode16", runner: macos-15, experimental: false }   # current gate
-          - { xcode: "xcode26", runner: macos-26, experimental: true }    # builds + fake gate pass; DAT mock still 0/4 (docs/IOS_OPTIONS.md)
+          - { xcode: "xcode16", runner: macos-15, experimental: false }   # gate
+          - { xcode: "xcode26", runner: macos-26, experimental: false }   # gating too: DAT mock + fake UI tests (run 38126000773)
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 50

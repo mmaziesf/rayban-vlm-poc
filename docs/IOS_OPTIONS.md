@@ -32,7 +32,8 @@ The app log shows `connecting/undefined` → **`connected/compatible`** and "Moc
 At that point the probes still differed from the sample only in *project generator*. Reading XcodeGen's source showed the plist rewrite.
 
 **CI now:**
-- Gate = GlanceCore + build (+ plist check) + **MockLoopUITests** + FakeGlassesUITests (backup gate, runs even if the mock step fails).
+- Gate on **both** matrix legs (Xcode 16.4 and 26.6): GlanceCore + build (+ plist check) + **MockLoopUITests** + FakeGlassesUITests (backup gate, runs even if the mock step fails).
+- Follow-up race fix: run [38126926753](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38126926753) went 3/4 on Xcode 26 (`testSpeechDescribeUsesBufferedFrame`: "session did not reach .started (state=started)"). `stateStream()` doesn't replay the current state, so `.started` could arrive between the check and the subscription. `GlassesRig.waitForStarted` now also polls `session.state`.
 - The `mock-bisect` job and `ios/MockProbe` are removed.
 - **Still open:** real iPhone + glasses, and the iOS on-device VLM (stub).
 
