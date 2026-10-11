@@ -26,26 +26,50 @@ final class GlassesRig: @unchecked Sendable {
         self.buffer = buffer; self.clock = clock; self.sampleEveryN = max(1, sampleEveryN)
     }
 
-    func start(selector: any DeviceSelector,
-               onTranscript: @escaping @Sendable (String, Bool, Float) -> Void) throws {
+    /// Same order as Meta's DisplayAccess sample: create session → start → wait for `.started` → add capabilities.
+    /// Each capability is optional and reported via `step`, so one failing capability can't take the app down.
+    func start(selector: any DeviceSelector, step: @escaping @Sendable (String) -> Void,
+               onTranscript: @escaping @Sendable (String, Bool, Float) -> Void) async throws {
         let s = try Wearables.shared.createSession(deviceSelector: selector)
-        try s.start()
         session = s
+        step("session start")
+        try s.start()
+        let started = await Self.waitForStarted(s, timeout: .seconds(15))
+        guard started else { throw RigError.sessionNotStarted(String(describing: s.state)) }
+        step("session started")
 
-        // Camera: raw frames so we can read the luma plane (no decode needed).
-        if let cam = try s.addCamera(config: StreamConfiguration(videoCodec: .raw, resolution: .medium, frameRate: 2)) {
-            camera = cam
-            tokens.append(cam.stream.videoFramePublisher.listen { [weak self] vf in self?.onVideoFrame(vf.sampleBuffer) })
-            cam.stream.start()
+        do {
+            if let cam = try s.addCamera(config: StreamConfiguration(videoCodec: .raw, resolution: .medium, frameRate: 2)) {
+                camera = cam
+                tokens.append(cam.stream.videoFramePublisher.listen { [weak self] vf in self?.onVideoFrame(vf.sampleBuffer) })
+                cam.stream.start()
+                step("camera started")
+            } else { step("WARN camera unavailable") }
+        } catch { step("WARN camera: \(error)") }
+        do {
+            if let sp = try s.addSpeech() {
+                speech = sp
+                tokens.append(sp.transcriptionPublisher.listen { r in onTranscript(r.text, r.isFinal, r.confidence) })
+                sp.start()
+                step("speech started")
+            } else { step("WARN speech unavailable") }
+        } catch { step("WARN speech: \(error)") }
+        do { let d = try s.addDisplay(); d.start(); hud = DatHudRenderer(display: d); step("display started") }
+        catch { step("WARN display: \(error)") }
+    }
+
+    enum RigError: Error, CustomStringConvertible {
+        case sessionNotStarted(String)
+        var description: String { switch self { case .sessionNotStarted(let st): "session did not reach .started (state=\(st))" } }
+    }
+
+    private static func waitForStarted(_ s: DeviceSession, timeout: Duration) async -> Bool {
+        if s.state == .started { return true }
+        return await withTaskGroup(of: Bool.self) { g in
+            g.addTask { for await st in s.stateStream() { if st == .started { return true }; if st == .stopped { return false } }; return false }
+            g.addTask { try? await Task.sleep(for: timeout); return false }
+            let r = await g.next() ?? false; g.cancelAll(); return r
         }
-        // Speech: partial + final transcriptions.
-        if let sp = try s.addSpeech() {
-            speech = sp
-            tokens.append(sp.transcriptionPublisher.listen { r in onTranscript(r.text, r.isFinal, r.confidence) })
-            sp.start()
-        }
-        // Display (Ray-Ban Display only; other models throw → HUD falls back to phone UI only).
-        if let d = try? s.addDisplay() { d.start(); hud = DatHudRenderer(display: d) }
     }
 
     private func onVideoFrame(_ sb: CMSampleBuffer) {

@@ -23,14 +23,43 @@ jobs:
           cd ios/GlanceApp
           xcodebuild build-for-testing -project GlanceApp.xcodeproj -scheme GlanceApp \
             -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO | tee build.log
-      - name: UI tests (MockDeviceKit, no glasses) — known failing, see docs/IOS_OPTIONS.md
-        continue-on-error: true   # visible as a failed step, but doesn't hide the build gate. Remove once green.
+      - name: UI tests (MockDeviceKit, no glasses)
+        id: uitests
         run: |
           set -o pipefail
           cd ios/GlanceApp
           xcodebuild test-without-building -project GlanceApp.xcodeproj -scheme GlanceApp \
             -destination 'platform=iOS Simulator,name=iPhone 16' -resultBundlePath UITests.xcresult \
-            CODE_SIGNING_ALLOWED=NO TIMEOUT_SCALE=2 | tee xcodebuild.log
+            CODE_SIGNING_ALLOWED=NO | tee xcodebuild.log
+      - name: Diagnostics (crash reports, app log, xcresult)
+        if: always()
+        run: |
+          cd ios/GlanceApp
+          echo "::group::Test summary"
+          xcrun xcresulttool get test-results summary --path UITests.xcresult --compact 2>&1 | tee summary.json | head -c 6000 || true
+          echo; echo "::endgroup::"
+          echo "::group::Failures"
+          grep -E "error: -\[|status was|HUD never" xcodebuild.log | head -40 || true
+          echo "::endgroup::"
+          echo "::group::Crash reports (GlanceApp)"
+          mkdir -p diag
+          for f in $(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i glance | head -3); do
+            cp ~/Library/Logs/DiagnosticReports/"$f" diag/ ; echo "=== $f"; head -c 12000 ~/Library/Logs/DiagnosticReports/"$f"; echo
+          done
+          echo "::endgroup::"
+          echo "::group::App log (GlanceDiag / GlanceHud / faults)"
+          xcrun simctl spawn booted log show --last 30m --style compact \
+            --predicate 'process == "GlanceApp" AND (eventMessage CONTAINS "Glance" OR messageType == 16 OR messageType == 17)' \
+            > diag/app.log 2>&1 || true
+          grep -E "GlanceDiag|GlanceHud|Fatal|fault|error" diag/app.log | tail -150 || true
+          echo "::endgroup::"
+          xcrun xcresulttool export attachments --path UITests.xcresult --output-path diag/attachments >/dev/null 2>&1 || true
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: ios-logs, path: "ios/GlanceApp/*.log\nios/GlanceApp/UITests.xcresult" }
+        with:
+          name: ios-logs
+          path: |
+            ios/GlanceApp/*.log
+            ios/GlanceApp/summary.json
+            ios/GlanceApp/diag
+            ios/GlanceApp/UITests.xcresult

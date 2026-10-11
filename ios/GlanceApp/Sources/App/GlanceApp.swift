@@ -7,7 +7,10 @@ import GlanceCore
 @main
 struct GlanceAppMain: App {
     @StateObject private var model = GlanceModel()
-    init() { try? Wearables.configure() }
+    init() {
+        do { try Wearables.configure(); NSLog("GlanceDiag: Wearables.configure ok") }
+        catch { NSLog("GlanceDiag: Wearables.configure failed: %@", "\(error)") }   // e.g. already configured
+    }
     var body: some Scene {
         WindowGroup {
             ContentView().environmentObject(model)
@@ -35,7 +38,16 @@ final class GlanceModel: ObservableObject {
     private var mock: MockRig?
     #endif
 
+    @Published var mockDeviceId = ""
+    private var started = false
+
+    /// Every step is NSLog'd ("GlanceDiag: …", visible in `log show` on CI) and shown in `status`;
+    /// any failure lands on the HUD as Error instead of crashing.
+    private func step(_ s: String) { NSLog("GlanceDiag: %@", s); status = s }
+
     func start(useMock: Bool) {
+        guard !started else { step("already started"); return }
+        started = true
         let hud = TeeHud { [weak self] s in
             let (_, body, meta) = DatHudRenderer.lines(s)
             Task { @MainActor in self?.hudLabel = s.label; self?.hudText = body; self?.hudMeta = meta }
@@ -45,20 +57,30 @@ final class GlanceModel: ObservableObject {
         let ctl = GlanceController(router: IntentRouter(), buffer: buffer, frames: frames, vlm: CannedVlmEngine(),
                                    hud: hud, speaker: speaker, mealLog: meals, clock: SystemClock())
         controller = ctl; self.rig = rig
-        Task {
+        let queue = self.queue
+        Task { @MainActor in
             do {
                 var selector: any DeviceSelector = AutoDeviceSelector(wearables: Wearables.shared)
                 #if DEBUG
-                if useMock { let m = MockRig(); mock = m; selector = try await m.startAndAwait() }
+                if useMock {
+                    let m = MockRig(); mock = m
+                    selector = try await m.startAndAwait { [weak self] in self?.step($0) }
+                    mockDeviceId = m.deviceId ?? ""
+                }
                 #endif
-                try rig.start(selector: selector) { [weak self] text, fin, conf in
-                    self?.queue.async { ctl.onTranscription(text, isFinal: fin, confidence: conf) }
+                // @Sendable + explicit main-actor hop: a MainActor-inferred closure called off-main traps at runtime (dispatch_assert_queue).
+                try await rig.start(selector: selector, step: { s in Task { @MainActor [weak self] in self?.step(s) } }) { text, fin, conf in
+                    queue.async { ctl.onTranscription(text, isFinal: fin, confidence: conf) }
                 }
                 hud.glasses = rig.hud
                 ctl.streamLive = true
-                status = useMock ? "Mock glasses connected" : "Glasses session started"
+                step(useMock ? "Mock glasses connected" : "Glasses session started")
                 queue.async { ctl.showIdle() }
-            } catch { status = "Start failed: \(error)" }
+            } catch {
+                step("Start failed: \(error)")
+                hudLabel = "Error"; hudText = "\(error)"
+                started = false
+            }
         }
     }
 
@@ -88,6 +110,7 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(m.status).font(.caption).accessibilityIdentifier("status")
+            Text(m.mockDeviceId).font(.caption2).accessibilityIdentifier("mockDeviceId")
             Text(m.hudLabel).font(.title).accessibilityIdentifier("hudLabel")
             Text(m.hudText).accessibilityIdentifier("hudText")
             Text(m.hudMeta).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("hudMeta")

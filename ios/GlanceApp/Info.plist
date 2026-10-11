@@ -10,6 +10,11 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>UILaunchScreen</key><dict/>
   <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>glance</string><string>glance-debug</string></array></dict></array>
+  <!-- Privacy strings: iOS terminates the app (TCC) if camera/mic/speech are touched without them.
+       Suspected cause of CI run 38107229753 crash on "Start (mock)" (camera stream + speech). Meta's CameraAccess sample declares mic+camera. -->
+  <key>NSMicrophoneUsageDescription</key><string>Hear voice commands for Glance.</string>
+  <key>NSCameraUsageDescription</key><string>See what you are looking at.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Understand voice commands.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Connect to your Meta glasses.</string>
   <key>UIBackgroundModes</key><array><string>processing</string><string>bluetooth-central</string><string>bluetooth-peripheral</string><string>external-accessory</string></array>
   <key>NSLocalNetworkUsageDescription</key><string>Find and connect to your glasses over Wi-Fi.</string>

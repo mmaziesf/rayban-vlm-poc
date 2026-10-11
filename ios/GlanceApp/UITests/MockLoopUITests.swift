@@ -1,12 +1,11 @@
-// ⚠️ STRUCTURAL / UNVERIFIED: written on Linux against the DAT 1.0.1 .swiftinterface files; never compiled
-// (MWDAT* are iOS-only binary xcframeworks). First compile happens on macOS (see ios/README.md / docs/IOS_OPTIONS.md).
-// Mirrors phone/app/src/androidTest/.../MockLoopTest.kt (4 cases). Requires the app's DEBUG MockRig test server (port 9000).
+// Mirrors phone/app/src/androidTest/.../MockLoopTest.kt (4 cases). Drives the app's in-process MockDeviceKit
+// (DEBUG MockRig) through MockDeviceTestClient → the app's test server on :9000.
 import XCTest
 import MWDATMockDeviceTestClient
 
 final class MockLoopUITests: XCTestCase {
     let app = XCUIApplication()
-    let timeoutScale = Double(ProcessInfo.processInfo.environment["TIMEOUT_SCALE"] ?? "1") ?? 1
+    let timeoutScale = Double(ProcessInfo.processInfo.environment["TIMEOUT_SCALE"] ?? "2") ?? 2
 
     override func setUp() {
         continueAfterFailure = false
@@ -14,35 +13,42 @@ final class MockLoopUITests: XCTestCase {
         app.buttons["startMock"].tap()
         let status = app.staticTexts["status"]
         let ok = NSPredicate(format: "label == %@", "Mock glasses connected")
-        let r = XCTWaiter.wait(for: [expectation(for: ok, evaluatedWith: status)], timeout: 20 * timeoutScale)
-        // CI run 38106506396: this never matched. Surface the app's real status (e.g. "Start failed: …") in the failure.
-        XCTAssertEqual(r, .completed, "status was: '\(status.exists ? status.label : "<missing>")'")
+        let r = XCTWaiter.wait(for: [expectation(for: ok, evaluatedWith: status)], timeout: 30 * timeoutScale)
+        if r != .completed {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.lifetime = .keepAlways; add(shot)
+        }
+        XCTAssertEqual(r, .completed,
+            "status was: '\(status.exists ? status.label : "<missing>")' appState=\(app.state.rawValue) " +
+            "hud='\(app.staticTexts["hudLabel"].exists ? app.staticTexts["hudLabel"].label : "<missing>")' " +
+            "text='\(app.staticTexts["hudText"].exists ? app.staticTexts["hudText"].label : "<missing>")'")
     }
 
-    private func waitLabel(_ label: String, _ t: Double = 15) {
+    private func waitLabel(_ label: String, _ t: Double = 20) {
         let el = app.staticTexts["hudLabel"]
-        let p = NSPredicate(format: "label == %@", label)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: p, evaluatedWith: el)], timeout: t * timeoutScale), .completed, "HUD never reached \(label)")
+        let r = XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "label == %@", label), evaluatedWith: el)], timeout: t * timeoutScale)
+        XCTAssertEqual(r, .completed, "HUD never reached \(label); was '\(el.exists ? el.label : "<missing>")' text='\(app.staticTexts["hudText"].label)'")
     }
+
+    /// The device the app paired in-process (MockRig) — don't pair a second one from the test.
+    private var deviceId: String { app.staticTexts["mockDeviceId"].label }
 
     func testDisplayIdleShowsLiveBuffer() {
         waitLabel("Ready")
-        XCTAssertTrue(app.staticTexts["hudMeta"].label.hasPrefix("Live"))
+        XCTAssertTrue(app.staticTexts["hudMeta"].label.hasPrefix("Live"), "meta='\(app.staticTexts["hudMeta"].label)'")
     }
 
     func testSpeechDescribeUsesBufferedFrame() async throws {
-        let client = MockDeviceTestClient(port: 9000)
-        // NOTE: deviceId of the in-app paired mock; TODO(verify): expose via accessibility label if pairDevice is needed instead.
-        let id = await client.pairDevice(deviceType: .metaRayBanDisplay) ?? ""
-        _ = await client.simulateTranscription(deviceId: id, text: "what am I seeing", isFinal: true, confidence: 0.95)
-        waitLabel("Answer")
+        let id = await MainActor.run { deviceId }
+        let ok = await MockDeviceTestClient(port: 9000).simulateTranscription(deviceId: id, text: "what am I seeing", isFinal: true, confidence: 0.95)
+        XCTAssertTrue(ok, "test client simulateTranscription failed (id=\(id))")
+        await MainActor.run { waitLabel("Answer") }
     }
 
     func testSpeechLogMealLogs() async throws {
-        let client = MockDeviceTestClient(port: 9000)
-        let id = await client.pairDevice(deviceType: .metaRayBanDisplay) ?? ""
-        _ = await client.simulateTranscription(deviceId: id, text: "log this meal", isFinal: true, confidence: 0.95)
-        waitLabel("Logged")
+        let id = await MainActor.run { deviceId }
+        let ok = await MockDeviceTestClient(port: 9000).simulateTranscription(deviceId: id, text: "log this meal", isFinal: true, confidence: 0.95)
+        XCTAssertTrue(ok, "test client simulateTranscription failed (id=\(id))")
+        await MainActor.run { waitLabel("Logged") }
     }
 
     func testCommandPathWithoutSpeech() {

@@ -1,34 +1,57 @@
-// ⚠️ STRUCTURAL / UNVERIFIED: written on Linux against the DAT 1.0.1 .swiftinterface files; never compiled
-// (MWDAT* are iOS-only binary xcframeworks). First compile happens on macOS (see ios/README.md / docs/IOS_OPTIONS.md).
-// Compiled only in Debug (project.yml excludes Debug/ from Release via a DEBUG #if).
+// Debug-only Mock Device Kit rig. Mirrors Android debug MockRig and Meta's DisplayAccess sample
+// (LivePhonePreviewManager): enable → pair RBD → powerOn/unfold/don → wait until linkState == .connected &&
+// compatibility == .compatible → SpecificDeviceSelector(device: id).
 #if DEBUG
 import Foundation
 import MWDATCore
 import MWDATMockDevice
 
-/// Mirrors Android debug MockRig: enable MDK, pair a Ray-Ban Display, power/unfold/don, feed the same H.265 clip.
+enum MockRigError: Error, CustomStringConvertible {
+    case notReady(link: String, compat: String)
+    var description: String {
+        switch self { case .notReady(let l, let c): "mock device not ready (link=\(l), compat=\(c))" }
+    }
+}
+
 final class MockRig: @unchecked Sendable {
     private var glasses: (any MockGlasses)?
+    private(set) var deviceId: DeviceIdentifier?
 
-    func startAndAwait(timeout: TimeInterval = 15) async throws -> any DeviceSelector {
-        MockDeviceKit.shared.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true))
-        let g = try MockDeviceKit.shared.pairGlasses(model: .metaRayBanDisplay)
+    @MainActor
+    func startAndAwait(timeout: Duration = .seconds(15), step: (String) -> Void) async throws -> any DeviceSelector {
+        let kit = MockDeviceKit.shared
+        step("MDK enable")
+        if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true)) }
+        step("MDK pair metaRayBanDisplay")
+        let g = try kit.pairGlasses(model: .metaRayBanDisplay)
         g.powerOn(); g.unfold(); g.don()
+        g.services.speech.setTranscriptionSource(.injected)   // never the live phone mic in tests
         if let feed = Bundle.main.url(forResource: "mock_feed_hevc", withExtension: "mp4") { g.services.camera.setCameraFeed(fileURL: feed) }
+        else { step("WARN mock_feed_hevc.mp4 missing from bundle") }
         if let jpg = Bundle.main.url(forResource: "mock_photo_meal", withExtension: "jpg") { g.services.camera.setCapturedImage(fileURL: jpg) }
-        glasses = g
-        // Test server for XCUITest MockDeviceTestClient; non-fatal like Android.
-        _ = try? await MockDeviceKit.shared.startTestServer(port: 9000)
-        // TODO(verify on macOS): wait for link CONNECTED like Android (devicesStream / addLinkStateListener).
-        try await Task.sleep(nanoseconds: 500_000_000)
-        _ = timeout
-        return AutoDeviceSelector(wearables: Wearables.shared)
+        glasses = g; deviceId = g.deviceIdentifier
+
+        step("MDK wait connected id=\(g.deviceIdentifier)")
+        let clock = ContinuousClock(); let deadline = clock.now.advanced(by: timeout)
+        while true {
+            let d = Wearables.shared.deviceForIdentifier(g.deviceIdentifier)
+            if let d, d.linkState == .connected, d.compatibility() == .compatible { break }
+            if clock.now >= deadline {
+                throw MockRigError.notReady(link: d.map { String(describing: $0.linkState) } ?? "no device",
+                                            compat: d.map { String(describing: $0.compatibility()) } ?? "-")
+            }
+            try await clock.sleep(for: .milliseconds(100))
+        }
+        // Test server for XCUITest MockDeviceTestClient / Chrome preview. Non-fatal (like Android).
+        do { let port = try await kit.startTestServer(port: 9000); step("MDK test server :\(port)") }
+        catch { step("WARN test server: \(error)") }
+        return SpecificDeviceSelector(device: g.deviceIdentifier)
     }
 
     func say(_ text: String) {
         guard let s = glasses?.services.speech else { return }
         let words = text.split(separator: " ")
-        for i in 1..<max(words.count, 1) { s.simulateTranscription(text: words.prefix(i).joined(separator: " "), isFinal: false, confidence: 0.9) }
+        if words.count > 1 { for i in 1..<words.count { s.simulateTranscription(text: words.prefix(i).joined(separator: " "), isFinal: false, confidence: 0.9) } }
         s.simulateTranscription(text: text, isFinal: true, confidence: 0.95)
     }
 
