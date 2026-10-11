@@ -10,6 +10,13 @@ targets:
     platform: iOS
     sources: [Sources, Debug, Resources]   # Debug/ is #if DEBUG; TODO: exclude Resources/mock_* from Release
     info: { path: Info.plist }
+    settings:
+      base:
+        # Simulator: ad-hoc "Sign to Run Locally" (no team). DAT's Wearables.configure() uses the keychain and fails with
+        # internalError when the app has no application-identifier entitlement (CODE_SIGNING_ALLOWED=NO; CI run 38109145843).
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
     dependencies:
       - package: GlanceCore
       - { package: MWDAT, product: MWDATCore }

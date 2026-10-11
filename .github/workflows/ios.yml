@@ -22,7 +22,7 @@ jobs:
           set -o pipefail
           cd ios/GlanceApp
           xcodebuild build-for-testing -project GlanceApp.xcodeproj -scheme GlanceApp \
-            -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO | tee build.log
+            -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES | tee build.log
       - name: UI tests (MockDeviceKit, no glasses)
         id: uitests
         run: |
@@ -37,7 +37,7 @@ jobs:
           echo $! > diag/logstream.pid
           xcodebuild test-without-building -project GlanceApp.xcodeproj -scheme GlanceApp \
             -destination 'platform=iOS Simulator,name=iPhone 16' -resultBundlePath UITests.xcresult \
-            CODE_SIGNING_ALLOWED=NO | tee xcodebuild.log
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES | tee xcodebuild.log
       - name: Diagnostics (crash reports, app log, xcresult)
         if: always()
         run: |

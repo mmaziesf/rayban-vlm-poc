@@ -3,9 +3,6 @@
 import SwiftUI
 import MWDATCore
 import GlanceCore
-#if DEBUG
-import MWDATMockDevice
-#endif
 
 @main
 struct GlanceAppMain: App {
@@ -61,16 +58,7 @@ final class GlanceModel: ObservableObject {
 
     func start(useMock: Bool) {
         guard !started else { step("already started"); return }
-        #if DEBUG
-        if !DatBoot.ok && useMock {
-            // Meta BirdSpotter sample: "the [mock] kit configures DAT itself if nothing has". Try that, keep the original error visible.
-            let firstError = DatBoot.error ?? "?"
-            step("DAT configure failed (\(firstError)); enabling MockDeviceKit")
-            MockDeviceKit.shared.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true))
-            DatBoot.configure()
-            if DatBoot.ok { step("DAT ok via MockDeviceKit (first error: \(firstError))") }
-        }
-        #endif
+        // (Removed: enabling MockDeviceKit when DAT is unconfigured — run 38109145843 showed MDK.enable itself traps then.)
         guard DatBoot.ok else {   // touching Wearables.shared now would trap inside MWDATCore
             step("Start failed: DAT configure: \(DatBoot.error ?? "unknown")"); hudLabel = "Error"; hudText = status; return
         }
