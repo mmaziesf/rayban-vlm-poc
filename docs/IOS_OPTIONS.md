@@ -12,6 +12,11 @@ _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not r
   - The job still showed green because `xcodebuild test | tee` lost the exit code.
   - **Fixed in the workflow:** `set -o pipefail`; split into a `build-for-testing` gate plus a `test-without-building` step marked `continue-on-error`, so it is visible as failing; upload the `.xcresult`.
   - The test now prints the app's actual status label (e.g. `Start failed: …`).
+- **Run 2:** https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38107229753 (commit `52e3b3c`, with the fixed workflow).
+  - `** TEST BUILD SUCCEEDED **`, then `** TEST EXECUTE FAILED **`: UI tests still 0/4.
+  - The new diagnostic shows `status was: '<missing>'` in all 4 tests, and XCTest logged "Checking for crash reports corresponding to **unexpected termination** of dev.arash.GlanceApp" right after `Tap "startMock"`.
+  - So the app **crashes on mock start**; it is not just slow to connect. The crash report wasn't recoverable from the `.xcresult` on Linux.
+  - Next: add an `xcrun xcresulttool` / `~/Library/Logs/DiagnosticReports/*.ips` dump step on the macOS runner, and wrap `MockDeviceKit.enable`/`pairGlasses` and `Wearables.configure()` with logged errors.
 - **Next iOS fix candidates:**
   1. Wait for the link to be CONNECTED instead of sleeping 0.5 s.
   2. Use a `SpecificDeviceSelector` for the mock device instead of `AutoDeviceSelector`.
