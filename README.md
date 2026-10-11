@@ -124,7 +124,7 @@ Two Debug-only ways to run without glasses:
 | Mode | How | What it exercises | Status on CI |
 |---|---|---|---|
 | **Fake glasses** | launch argument `--fake-glasses`, then tap **Start (mock)** | Real controller / intent router / frame buffer / HUD; synthetic frames, **no DAT link** | ✅ `FakeGlassesUITests` 4/4 (CI gate) |
-| **DAT Mock Device Kit** | tap **Start (mock)** with no arguments | DAT session, Camera, Speech, Display with a mock Ray-Ban Display | ❌ `MockLoopUITests` 0/4 on Xcode 16.4 and 26.6: the mock device never reaches `connected` (non-gating; [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md)) |
+| **DAT Mock Device Kit** | launch with `--ui-testing` (MockDeviceKit + test server start at launch), tap **Start (mock)**, then pair from the test via `MockDeviceTestClient.pairDevice()`, like Meta's CameraAccess tests. Without the flag, Start (mock) pairs in-process | DAT session, Camera, Speech, Display with a mock Ray-Ban Display | ❌ `MockLoopUITests` 0/4 on Xcode 16.4 and 26.6: the mock device never reaches `connected` (non-gating; [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md)) |
 
 UI tests:
 ```bash

@@ -2,6 +2,42 @@
 
 _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not run = 📝._
 
+## Update 2026-10-11 01:50 PT: test-process pairing (CameraAccessUITests pattern) — still 0/4 on both Xcodes
+Run [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38121054364](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38121054364), commit d39cb4c. Overall ✅ green (gate unchanged).
+
+| Leg | Fake-glasses gate | MockLoopUITests |
+|---|---|---|
+| xcode16 (macos-15, Xcode 16.4, iOS 26.2) | ✅ 4/4 | ❌ 0/4 |
+| xcode26 (macos-26, Xcode 26.6, iOS 26.5) | ✅ 4/4 | ❌ 0/4 |
+
+What was implemented (now the default `MockLoopUITests` flow):
+1. Launch with `--ui-testing` + `MWDAT_TEST_SERVER_PORT_FILE`.
+   - `DatBoot` runs `Wearables.configure()`, then `MockDeviceKit.enable(initiallyRegistered: false)` + `startTestServer(portFilePath:)`.
+   - Only after that does it subscribe to devices. This is the same order as `CameraAccessApp.init`.
+2. The test calls `MockDeviceTestClient.waitForServer` ✅.
+3. The test taps Start (mock). The app calls `startRegistration()` → registered ✅ and shows "Waiting for test-paired glasses".
+4. The test calls `client.pairDevice(deviceType: .metaRayBanDisplay)` → id returned ✅. The device appears in `Wearables.shared.devices` ✅.
+5. The app waits up to 90 s × timeoutScale on `AutoDeviceSelector.activeDeviceStream()`.
+   - ❌ It never yields.
+   - The device stays `disconnected/undefined` → "mock device not ready".
+
+**Exact remaining differences vs Meta's CameraAccess sample (whose session-start test passes on macos-26 CI):**
+| | CameraAccess | GlanceApp |
+|---|---|---|
+| DAT products linked | MWDATCore, **MWDATCamera**, MWDATMockDevice (+ TestClient in UI tests) | MWDATCore, MWDATCamera, **MWDATDisplay, MWDATSpeech**, MWDATMockDevice (+ TestClient) |
+| Mock model paired by the test | `pairDevice()` default `.rayBanMeta` | `.metaRayBanDisplay` (in-process probe with `.rayBanMeta` also failed, but never via the test client) |
+| Swift language mode / deployment target | Swift 6.0 / iOS 17.2 | Swift 5 (XcodeGen default) / iOS 17.0 |
+| `MockDeviceKitConfig` | `initiallyRegistered: false` | `initiallyRegistered: false, initialPermissionsGranted: true` |
+| Info.plist | `audio` background mode, scene manifest, `UIRequiredDeviceCapabilities arm64`; no ExternalAccessory | ExternalAccessory protocol + mode (removing them: no change, run 38119977792) |
+| Bundle id / project | `com.meta.wearables.external.CameraAccess`, hand-made .xcodeproj | `dev.arash.GlanceApp`, XcodeGen |
+| Already matched (no effect) | ad-hoc signing, keychain entitlement, Xcode 26, registration flow, AutoDeviceSelector, test-server pairing, pairing order, off-main pairing | |
+
+**Most likely next step (not tried):** the extra **MWDATDisplay/MWDATSpeech** linkage. `compatibility` stays `undefined`, which suggests that capability modules registered at launch change how the mock device's compatibility is evaluated.
+
+Cheapest check: a build variant (or a second tiny app target) linking only Core + Camera + MockDevice, running the same test flow with `pairDevice()` default `.rayBanMeta`. If that connects, add modules back one by one. Second option: build CameraAccess with MWDATDisplay + MWDATSpeech added, to see whether it breaks.
+
+**Parked** per decision: the gate stays GlanceCore + build + `FakeGlassesUITests` (Xcode 16.4); MockLoopUITests stay non-gating on both legs.
+
 ## Update 2026-10-11 00:55 PT: Xcode 26 builds; DAT mock still 0/4 on macos-26 (final blocker for now)
 **CI now** (`app-simulator` matrix; GlanceCore 11/11 + build + `FakeGlassesUITests` gate in both legs):
 | Leg | Runner / toolchain | Build | FakeGlassesUITests | MockLoopUITests (DAT MockDeviceKit) |
@@ -27,7 +63,7 @@ So DAT mock sessions **do work** on this runner. The blocker is something in **o
 | CI-only: removed `UISupportedExternalAccessoryProtocols` + `external-accessory` background mode (absent in both samples; DAT does read them) | [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38119977792](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38119977792) | 0/4 (experiment reverted) |
 
 **Remaining differences from CameraAccess (untried; the next step if M7 is resumed):**
-1. **Pairing path.** CameraAccess pairs **from the XCUITest process via the test server** (`MockDeviceTestClient.pairDevice()` with `MWDAT_TEST_SERVER_PORT_FILE`). MDK is enabled and `startTestServer(portFilePath:)` is started in `App.init` when `--ui-testing` is set. We pair in-process with `MockDeviceKit.shared.pairGlasses` after a button tap. This is the most promising candidate: a third test path (~1 CI cycle).
+1. ~~**Pairing path.**~~ (tried 01:50 PT, no change) CameraAccess pairs **from the XCUITest process via the test server** (`MockDeviceTestClient.pairDevice()` with `MWDAT_TEST_SERVER_PORT_FILE`). MDK is enabled and `startTestServer(portFilePath:)` is started in `App.init` when `--ui-testing` is set. We pair in-process with `MockDeviceKit.shared.pairGlasses` after a button tap. This is the most promising candidate: a third test path (~1 CI cycle).
 2. Swift 6 language mode / deployment target 17.2 (ours: Swift 5 mode, 17.0); `audio` background mode.
 
 **Decision:** the honest gate is GlanceCore + Simulator build + `FakeGlassesUITests` on Xcode 16.4, with the same suite passing on Xcode 26 as a non-gating leg. `MockLoopUITests` keep running on every push and become gating again as soon as they pass.
