@@ -2,6 +2,36 @@
 
 _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not run = 📝._
 
+## Update 2026-10-11 00:55 PT: Xcode 26 builds; DAT mock still 0/4 on macos-26 (final blocker for now)
+**CI now** (`app-simulator` matrix; GlanceCore 11/11 + build + `FakeGlassesUITests` gate in both legs):
+| Leg | Runner / toolchain | Build | FakeGlassesUITests | MockLoopUITests (DAT MockDeviceKit) |
+|---|---|---|---|---|
+| `xcode16` (**gate**) | macos-15, Xcode 16.4, iOS 26.2 sim | ✅ | ✅ 4/4 | ❌ 0/4 (non-gating) |
+| `xcode26` (experimental, non-gating) | macos-26, Xcode 26.6, iOS 26.5 sim | ✅ (after fix) | ✅ 4/4 | ❌ 0/4 |
+
+**Xcode 26 fix:** one compile error, "unable to type-check this expression in reasonable time", in `GlassesRig.lumaFrame`'s BGRA→luma one-liner. It was split into typed sub-expressions. Errors were captured in [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38116666640](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38116666640), and the fix built green in [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38117301155](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38117301155).
+
+**Control: Meta's CameraAccess sample on macos-26 / Xcode 26.6** ([https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38118355688](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38118355688)):
+- `testRegisterAndPairShowsCameraScreen` ✅
+- **`testStartSessionThenStreaming` ✅**: a mock device reaches a started session and streams on the CI Simulator.
+- `testEndSession` ❌, on a late step ("return to session-ready after stopping the preview").
+
+So DAT mock sessions **do work** on this runner. The blocker is something in **our app's setup**, not the Simulator/runner, and **not the Xcode version** (Xcode 26 changed nothing for our app).
+
+**Attempts on macos-26 (all ❌ 0/4; the device is listed, `linkState` stays `disconnected`, `compatibility` stays `undefined`, `AutoDeviceSelector.activeDeviceStream()` stays nil):**
+| Attempt | Run | Result |
+|---|---|---|
+| Built with Xcode 26.6 (same code that failed on 16.4) | [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38117301155](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38117301155) | 0/4; probe: all variants `disconnected/undefined` |
+| `AutoDeviceSelector` + wait for `activeDeviceStream()` (CameraAccess style), instead of `SpecificDeviceSelector` + linkState | [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38118355688](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38118355688) | 0/4, `active=nil` |
+| `initiallyRegistered: false` + `Wearables.shared.startRegistration()` (MDK fake handler), like CameraAccess's registerViaUI | [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38119157425](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38119157425) | registration 0→3 (registered) ✅, link still disconnected, 0/4 |
+| CI-only: removed `UISupportedExternalAccessoryProtocols` + `external-accessory` background mode (absent in both samples; DAT does read them) | [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38119977792](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38119977792) | 0/4 (experiment reverted) |
+
+**Remaining differences from CameraAccess (untried; the next step if M7 is resumed):**
+1. **Pairing path.** CameraAccess pairs **from the XCUITest process via the test server** (`MockDeviceTestClient.pairDevice()` with `MWDAT_TEST_SERVER_PORT_FILE`). MDK is enabled and `startTestServer(portFilePath:)` is started in `App.init` when `--ui-testing` is set. We pair in-process with `MockDeviceKit.shared.pairGlasses` after a button tap. This is the most promising candidate: a third test path (~1 CI cycle).
+2. Swift 6 language mode / deployment target 17.2 (ours: Swift 5 mode, 17.0); `audio` background mode.
+
+**Decision:** the honest gate is GlanceCore + Simulator build + `FakeGlassesUITests` on Xcode 16.4, with the same suite passing on Xcode 26 as a non-gating leg. `MockLoopUITests` keep running on every push and become gating again as soon as they pass.
+
 ## Update 2026-10-10 22:45 PT: CI green on an honest fallback gate; DAT mock link still blocked
 **CI now:** `app-simulator` is green and the gate is real:
 - GlanceCore: 11/11 on Linux and macOS.

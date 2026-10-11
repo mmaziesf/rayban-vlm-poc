@@ -16,7 +16,7 @@ jobs:
       matrix:
         include:
           - { xcode: "xcode16", runner: macos-15, experimental: false }   # current gate
-          - { xcode: "xcode26", runner: macos-26, experimental: true }    # DAT samples need Xcode 26.4+; Meta's mock-pair test passes here (run 38115170427)
+          - { xcode: "xcode26", runner: macos-26, experimental: true }    # builds + fake gate pass; DAT mock still 0/4 (docs/IOS_OPTIONS.md)
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 50
@@ -27,19 +27,6 @@ jobs:
         run: X=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1); sudo xcode-select -s "$X"; xcodebuild -version
       - run: brew install xcodegen
       - run: cd ios/GlanceCore && swift test
-      - name: "Experiment (xcode26 leg only): drop ExternalAccessory keys like Meta's samples"
-        if: matrix.xcode == 'xcode26'
-        run: |
-          # Neither CameraAccess nor DisplayAccess declares these; their mock sessions start on CI (run 38118355688).
-          # Real glasses need com.meta.ar.wearable, so this is a CI/Simulator-only experiment, not a product change.
-          cd ios/GlanceApp
-          plutil -remove UISupportedExternalAccessoryProtocols Info.plist
-          python3 - <<'PY'
-          import plistlib; p='Info.plist'; d=plistlib.load(open(p,'rb'))
-          d['UIBackgroundModes']=[m for m in d['UIBackgroundModes'] if m!='external-accessory']
-          plistlib.dump(d,open(p,'wb'))
-          PY
-          plutil -p Info.plist | grep -iE "accessory|Background" -A5 || true
       - run: cd ios/GlanceApp && xcodegen
       - name: Pick (or create) an iPhone simulator
         id: sim
@@ -134,38 +121,3 @@ jobs:
             ios/GlanceApp/diag
             ios/GlanceApp/UITests.xcresult
             ios/GlanceApp/FakeUITests.xcresult
-  dat-sample-control:    # CONTROL (non-gating): does Meta's own CameraAccess sample get a mock device to a STARTED session + stream on CI?
-    runs-on: macos-26    # (run 38115170427 only proved testRegisterAndPairShowsCameraScreen, which never starts a session)
-    timeout-minutes: 40
-    continue-on-error: true
-    steps:
-      - name: Select newest Xcode 26
-        run: X=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1); sudo xcode-select -s "$X"; xcodebuild -version
-      - run: git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios dat && git -C dat log -1 --format='%h %cd'
-      - name: Pick + boot an iPhone simulator
-        id: sim
-        run: |
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)["devices"]
-          c=[(r,x) for r,xs in d.items() if "iOS" in r for x in xs if x["name"].startswith("iPhone")]
-          c.sort(key=lambda t:(t[0],t[1]["name"]))
-          print(c[-1][1]["udid"] if c else "")')
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$UDID" || true; xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true   # avoid cold-launch timeout
-      - name: "Meta CameraAccess: pair → active device → start session → stream"
-        run: |
-          set -o pipefail
-          cd dat/samples/CameraAccess
-          xcodebuild test -project CameraAccess.xcodeproj -scheme CameraAccess \
-            -destination "id=${{ steps.sim.outputs.udid }}" -resultBundlePath $GITHUB_WORKSPACE/Control.xcresult \
-            -only-testing:CameraAccessUITests/CameraAccessUITests/testRegisterAndPairShowsCameraScreen \
-            -only-testing:CameraAccessUITests/CameraAccessUITests/testStartSessionThenStreaming \
-            -only-testing:CameraAccessUITests/CameraAccessUITests/testEndSession \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES \
-            > $GITHUB_WORKSPACE/control.log 2>&1 || { grep -E "error:" $GITHUB_WORKSPACE/control.log | sort -u | head -30; false; }
-      - name: Control summary
-        if: always()
-        run: |
-          grep -E "Test Case .*(passed|failed)|\*\* TEST" control.log || true
-          xcrun xcresulttool get test-results summary --path Control.xcresult --compact 2>/dev/null | head -c 4000 || true

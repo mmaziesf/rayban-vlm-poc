@@ -100,7 +100,7 @@ After that, the bot drives turns and measurements with adb (debug broadcast + lo
 ### Prerequisites
 - **GlanceCore:** any Swift 6 toolchain, on Linux or macOS.
 - **GlanceApp:** a Mac with Xcode, plus `brew install xcodegen`.
-  - CI builds with Xcode 16.4 (macos-15 runner).
+  - Both are verified on CI: Xcode 16.4 (macos-15, the gate) and Xcode 26.6 (macos-26).
   - Meta's DAT samples state **Xcode 26.4+**, so prefer Xcode 26 locally.
 - DAT 1.0.1 is pulled automatically as a Swift package (binary xcframeworks; iOS only). GlanceApp **cannot be built on Linux**.
 
@@ -124,7 +124,7 @@ Two Debug-only ways to run without glasses:
 | Mode | How | What it exercises | Status on CI |
 |---|---|---|---|
 | **Fake glasses** | launch argument `--fake-glasses`, then tap **Start (mock)** | Real controller / intent router / frame buffer / HUD; synthetic frames, **no DAT link** | ✅ `FakeGlassesUITests` 4/4 (CI gate) |
-| **DAT Mock Device Kit** | tap **Start (mock)** with no arguments | DAT session, Camera, Speech, Display with a mock Ray-Ban Display | ❌ `MockLoopUITests` 0/4: the mock device never reaches `connected` on the CI Simulator (non-gating; [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md)) |
+| **DAT Mock Device Kit** | tap **Start (mock)** with no arguments | DAT session, Camera, Speech, Display with a mock Ray-Ban Display | ❌ `MockLoopUITests` 0/4 on Xcode 16.4 and 26.6: the mock device never reaches `connected` (non-gating; [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md)) |
 
 UI tests:
 ```bash
@@ -149,8 +149,10 @@ xcrun simctl openurl booted 'glance-debug://command?text=log%20this%20meal&viaMo
 | Job | What | Gating |
 |---|---|---|
 | `core-linux` | GlanceCore `swift test` on Ubuntu | yes |
-| `app-simulator` | GlanceCore on macOS, then XcodeGen + Simulator build, then `FakeGlassesUITests`. Also runs `MockLoopUITests` (DAT mock link) and a `--mock-probe` diagnostic. Uploads xcresult, crash reports and the app log | yes (except `MockLoopUITests`) |
-| `dat-sample-control` | On macos-26 + Xcode 26: Meta's own CameraAccess mock-pair UI test (passes), plus a build of our app with Xcode 26 (does not compile yet) | no |
+| `app-simulator (xcode16)` | macos-15 / Xcode 16.4. GlanceCore, then XcodeGen + Simulator build, then `FakeGlassesUITests`. Also runs `MockLoopUITests` (DAT mock link) and a `--mock-probe` diagnostic. Uploads xcresult, crash reports and the app log | yes (except `MockLoopUITests`) |
+| `app-simulator (xcode26)` | Same steps on macos-26 / Xcode 26.6 | no (experimental) |
+
+Meta's own CameraAccess sample starts a mock session on macos-26 CI, but our app's mock never connects. The investigation is in [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md).
 
 ---
 
