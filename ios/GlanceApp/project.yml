@@ -1,4 +1,4 @@
-# XcodeGen spec (brew install xcodegen && xcodegen) — UNVERIFIED: authored on Linux, never generated/built.
+# XcodeGen spec (brew install xcodegen && xcodegen). Authored on Linux; generated + built on GitHub Actions macos-15.
 name: GlanceApp
 options: { bundleIdPrefix: dev.arash, deploymentTarget: { iOS: "17.0" } }
 packages:
@@ -10,6 +10,12 @@ targets:
     platform: iOS
     sources: [Sources, Debug, Resources]   # Debug/ is #if DEBUG; TODO: exclude Resources/mock_* from Release
     info: { path: Info.plist }
+    # Same entitlement Meta's DisplayAccess/CameraAccess samples ship (we had none). Attempt for the mock link that never
+    # leaves disconnected/undefined (runs 38112910442, 38113596903).
+    entitlements:
+      path: GlanceApp.entitlements
+      properties:
+        keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"]
     settings:
       base:
         # Simulator: ad-hoc "Sign to Run Locally" (no team). DAT's Wearables.configure() uses the keychain and fails with

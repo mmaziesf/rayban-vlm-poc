@@ -1,5 +1,5 @@
-// ⚠️ STRUCTURAL / UNVERIFIED: written on Linux against the DAT 1.0.1 .swiftinterface files; never compiled
-// (MWDAT* are iOS-only binary xcframeworks). First compile happens on macOS (see ios/README.md / docs/IOS_OPTIONS.md).
+// Written on Linux against the DAT 1.0.1 .swiftinterface files; compiled on GitHub Actions macos-15 (MWDAT* are
+// iOS-only binary xcframeworks, so it cannot be built on the Linux box). See docs/IOS_OPTIONS.md.
 import Foundation
 import AVFoundation
 import GlanceCore
