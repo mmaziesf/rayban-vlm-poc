@@ -143,23 +143,31 @@ jobs:
           xcrun simctl boot "$UDID" || true; xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
       - name: Run variants
         run: |
+          set +e   # keep going through all variants (run 38122289140 stopped after the first failure)
           cd ios/MockProbe
-          for v in Lite Display Speech Full; do
-            echo "::group::Probe$v"
-            xcodebuild test -project MockProbe.xcodeproj -scheme Probe$v -destination "id=${{ steps.sim.outputs.udid }}" \
-              -resultBundlePath $GITHUB_WORKSPACE/Probe$v.xcresult \
+          runv() {  # $1 = label, rest = xcodebuild args
+            local v=$1; shift
+            xcodebuild test "$@" -destination "id=${{ steps.sim.outputs.udid }}" -resultBundlePath $GITHUB_WORKSPACE/$v.xcresult \
               CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES > $GITHUB_WORKSPACE/probe-$v.log 2>&1
-            rc=$?
-            grep -E "error:" $GITHUB_WORKSPACE/probe-$v.log | grep -v "XCTAssert" | sort -u | head -20
-            echo "::endgroup::"
-            r=$(xcrun xcresulttool get test-results summary --path $GITHUB_WORKSPACE/Probe$v.xcresult --compact 2>/dev/null | python3 -c 'import json,sys
-          try:
-            d=json.load(sys.stdin); f=[x["failureText"][:400] for x in d.get("testFailures",[])]
-            print("passed=%s failed=%s %s"%(d.get("passedTests"),d.get("failedTests")," | ".join(f)))
-          except Exception as e: print("no xcresult")')
-            echo "BISECT Probe$v rc=$rc $r"
-            grep -ao "PROBE_RESULT[^\"]*" $GITHUB_WORKSPACE/probe-$v.log | head -3
-          done
+            local rc=$?
+            echo "::group::$v compile errors (if any)"; grep -E "error:" $GITHUB_WORKSPACE/probe-$v.log | grep -v XCTAssert | sort -u | head -20; echo "::endgroup::"
+            local t=$(grep -aE "Test Case .*(passed|failed)" $GITHUB_WORKSPACE/probe-$v.log | sed -E "s/.*\[([^]]*)\]' (passed|failed).*/\1 \2/" | tr '\n' ';')
+            echo "BISECT $v rc=$rc tests: $t"
+            grep -aoE "PROBE_RESULT[^\"]*|(ACTIVE|SESSION) FAIL[^\"]{0,200}" $GITHUB_WORKSPACE/probe-$v.log | sort -u | head -4
+          }
+          runv ProbeLite       -project MockProbe.xcodeproj -scheme ProbeLite
+          runv ProbeLiteMetaId -project MockProbe.xcodeproj -scheme ProbeLiteMetaId
+          # Cross-check with Meta's real sample: unmodified, and with ONLY the app bundle id renamed.
+          git clone -q --depth 1 https://github.com/facebook/meta-wearables-dat-ios $GITHUB_WORKSPACE/dat
+          CA=$GITHUB_WORKSPACE/dat/samples/CameraAccess
+          SAMPLE_ARGS="-scheme CameraAccess -only-testing:CameraAccessUITests/CameraAccessUITests/testStartSessionThenStreaming CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="
+          runv SampleOriginal -project $CA/CameraAccess.xcodeproj $SAMPLE_ARGS
+          cp -R $CA $GITHUB_WORKSPACE/CameraAccessRenamed
+          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccess;/PRODUCT_BUNDLE_IDENTIFIER = dev.arash.cameraaccess;/' $GITHUB_WORKSPACE/CameraAccessRenamed/CameraAccess.xcodeproj/project.pbxproj
+          grep -c "dev.arash.cameraaccess" $GITHUB_WORKSPACE/CameraAccessRenamed/CameraAccess.xcodeproj/project.pbxproj
+          runv SampleRenamedId -project $GITHUB_WORKSPACE/CameraAccessRenamed/CameraAccess.xcodeproj $SAMPLE_ARGS
+          runv ProbeFull       -project MockProbe.xcodeproj -scheme ProbeFull
+          true
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: mock-bisect-logs, path: "probe-*.log" }
+        with: { name: mock-bisect-logs, path: "${{ github.workspace }}/probe-*.log" }
