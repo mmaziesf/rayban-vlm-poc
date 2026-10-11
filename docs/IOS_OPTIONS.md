@@ -2,6 +2,21 @@
 
 _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not run = 📝._
 
+## Update 2026-10-10 20:00 PT: first macOS CI run
+- **Repo:** https://github.com/mmaziesf/rayban-vlm-poc · **run:** https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38106506396 (commit `953c3ee`; both jobs reported ✅)
+- **Actually verified by that run:**
+  - `core-linux` 10/10.
+  - macOS `GlanceCore` 10/10.
+  - **`GlanceApp` (SwiftUI + DAT 1.0.1 SPM + MockDeviceKit) type-checks and builds for the iOS Simulator.** This upgrades it from "structural only" to **compiles**; only Swift 6 Sendable warnings, e.g. capture of non-Sendable `GlanceController`.
+- **Not passing:** `MockLoopUITests` **0/4**. Every test timed out in `setUp` waiting for the status "Mock glasses connected", so the app's start path (MDK enable → pair → session) did not reach "connected" on the Simulator.
+  - The job still showed green because `xcodebuild test | tee` lost the exit code.
+  - **Fixed in the workflow:** `set -o pipefail`; split into a `build-for-testing` gate plus a `test-without-building` step marked `continue-on-error`, so it is visible as failing; upload the `.xcresult`.
+  - The test now prints the app's actual status label (e.g. `Start failed: …`).
+- **Next iOS fix candidates:**
+  1. Wait for the link to be CONNECTED instead of sleeping 0.5 s.
+  2. Use a `SpecificDeviceSelector` for the mock device instead of `AutoDeviceSelector`.
+  3. Check whether `Wearables.configure()` threw on the Simulator.
+
 ## TL;DR — is iOS possible on this box?
 **Only partly.**
 - **✅ Runs here:** the platform-neutral Swift core, `ios/GlanceCore`. It covers intents, the rolling frame buffer, frame selection, the controller and meal parsing. It builds and **passes 10/10 XCTests** with the Linux Swift 6.4 toolchain.

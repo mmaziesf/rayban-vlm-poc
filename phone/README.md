@@ -32,7 +32,7 @@ Every API used in `app/` comes from Meta and Google docs pages linked in the fil
 
 ## Run the core tests (works on any machine with JDK 17 + kotlinc)
 ```bash
-phone/core/run-tests.sh      # last run 2026-10-10 PT: 40 passed, 0 failed
+phone/core/run-tests.sh      # last run 2026-10-10 20:02 PT: 49 passed, 0 failed (incl. 8 VlmSelection)
 ```
 
 ## Debug vs release layout
@@ -111,7 +111,7 @@ adb shell am instrument -w -e class glance.app.MockLoopTest dev.arash.glance.tes
 The test APK builds: `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk` (1.3 MB).
 
 ## Chrome simulator preview (optional, human or bot browser)
-`adb forward tcp:9000 tcp:9000` → `http://127.0.0.1:9000/` with the **Meta Ray-Ban Display Simulator** extension. Expect the Idle HUD chip `Live 2 fps · 0.x s`. To use the real model, swap `CannedVlmEngine` for `LiteRtVlmEngine(...)` after `adb push` of the model (M1c).
+`adb forward tcp:9000 tcp:9000` → `http://127.0.0.1:9000/` with the **Meta Ray-Ban Display Simulator** extension. Expect the Idle HUD chip `Live 2 fps · 0.x s`. Real model: build with `-Pglance.vlm=real` (or launch a debug build with `--es vlm real`) after `tools/m1c/push_model.sh`; see `docs/M1C_REAL_VLM.md`.
 
 Bridge data shapes: `bridge-contract.json`.
 
@@ -155,5 +155,6 @@ Still open:
 2. `DatHudRenderer` uses `runBlocking` around the suspend `sendContent`. Worker thread only. On TCG each render takes 1.5–3 s, and it blocks the turn.
 3. MDK Chrome preview server still fails to bind on the emulator (even with INTERNET). VERIFY on phone. HUD is asserted via `GlanceHud` logcat instead.
 4. `simulateLaunchAppAction` not yet covered by a test.
-5. Real Gemma inference (M1c) can't run on the TCG emulator (no GPU, 1.5 GB guest). Needs the phone (D1) or a cloud physical device.
+5. Real Gemma inference (M1c) can't run on the TCG emulator (no GPU, 1.5 GB guest). Needs the phone (D1) or a cloud physical device. Wiring, flag, model (sha256 OK on the box) and `tools/m1c/run_real.sh` are ready (`docs/M1C_REAL_VLM.md`).
+7. "Hey Meta, start Glance" is now bot-triggerable: `adb shell "am broadcast -a dev.arash.glance.DEBUG_COMMAND -n dev.arash.glance/glance.app.debug.DebugCommandReceiver --ez heyMeta true"` → logcat `GlanceDebug: heyMeta invocation=…` and MainActivity status `Hey Meta → Glance`. **Not yet run** on the emulator; a test assert is still TODO (gap 4).
 6. Release APK is unsigned (fine for now).

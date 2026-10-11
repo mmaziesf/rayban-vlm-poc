@@ -34,11 +34,12 @@ class LoggingHud(private val delegate: HudRenderer?, private val sink: (HudState
 object GlanceGraph {
     @Volatile var controller: GlanceController? = null
     @Volatile var rig: GlassesRig? = null
+    @Volatile var vlmInfo: String = "stub (default)"
     val buffer = FrameRingBuffer(capacity = 6) // 2 fps → ~3 s history
 
     /**
      * Starts the DAT session on [selector] and builds the controller.
-     * [vlm] defaults to the canned engine; swap for LiteRtVlmEngine once the model is on the device (M1c).
+     * [vlm]: MainActivity passes VlmFactory.build(...) (stub by default, real with -Pglance.vlm=real); tests use the default.
      */
     suspend fun start(
         context: Context, scope: CoroutineScope, selector: DeviceSelector,

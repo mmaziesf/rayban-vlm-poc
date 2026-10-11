@@ -12,7 +12,11 @@ final class MockLoopUITests: XCTestCase {
         continueAfterFailure = false
         app.launch()
         app.buttons["startMock"].tap()
-        XCTAssertTrue(app.staticTexts["Mock glasses connected"].waitForExistence(timeout: 20 * timeoutScale))
+        let status = app.staticTexts["status"]
+        let ok = NSPredicate(format: "label == %@", "Mock glasses connected")
+        let r = XCTWaiter.wait(for: [expectation(for: ok, evaluatedWith: status)], timeout: 20 * timeoutScale)
+        // CI run 38106506396: this never matched. Surface the app's real status (e.g. "Start failed: …") in the failure.
+        XCTAssertEqual(r, .completed, "status was: '\(status.exists ? status.label : "<missing>")'")
     }
 
     private func waitLabel(_ label: String, _ t: Double = 15) {

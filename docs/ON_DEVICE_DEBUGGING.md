@@ -62,7 +62,7 @@ This covers M1b, M1c and M2 end to end, including real Gemma 4 E4B latency and m
 | H4 | First adb authorization: on the phone, Wireless debugging → **Pair device with pairing code**. Send the bot the 6-digit code + pairing `IP:port` (Tailscale IP + pairing port) + the main "IP address & Port". The bot runs `adb pair` / `adb connect`. | Pairing secret is shown only on the phone screen | Once per box key |
 | H5 | **Meta AI app:** pair the glasses; Settings → App Info → tap App version 5× → **Developer Mode** on ([getting started](https://wearables.developer.meta.com/docs/develop/dat/getting-started-toolkit), High). Glasses/app versions must meet [version dependencies](https://wearables.developer.meta.com/docs/develop/dat/version-dependencies). | Account + device consent | Once |
 | H6 | Approve the Glance app **registration** in Meta AI and the DAT **camera permission** when the bot launches the flow. Registration needs internet ([permissions skill](https://raw.githubusercontent.com/facebook/meta-wearables-dat-android/main/plugins/mwdat-android/skills/permissions-registration/SKILL.md), High). | User consent screens; the bot should not click through consent on the user's behalf | Once (again if the app data is cleared) |
-| H7 | Accept the **Gemma license** on Hugging Face if the `.litertlm` download is gated (VERIFY). The bot then downloads to the box and `adb push`es it to the phone. | Account terms acceptance | Once |
+| H7 | ~~Accept the Gemma license~~ **Resolved 2026-10-10:** Gemma 4 is Apache-2.0 and `litert-community/gemma-4-E4B-it-litert-lm` is not gated (anonymous 200); already downloaded to the box with sha256 OK (`docs/M1C_REAL_VLM.md`). The bot then downloads to the box and `adb push`es it to the phone. | Account terms acceptance | Once |
 | H8 | **After a phone reboot:** legacy `adb tcpip 5555` mode is lost. Wireless debugging may need re-enabling (it can auto-re-enable on a trusted network, Med). If the phone shows a new random TLS port, the bot needs it (one message) unless it can rediscover it. | No supported way for non-root apps to enable adbd | Per reboot (rare) |
 | H9 | Real-hardware sessions only: glasses charged, on, hinge open (worn if DOFFED blocks capture); someone speaks if testing real ASR | Physical | Per M3 test session |
 
@@ -119,7 +119,7 @@ Everything else (builds, installs, test runs, log capture, crash triage, perf me
 | Meta AI app / real glasses | No (no Bluetooth to real glasses) | Yes |
 | Gemma 4 E4B | Impractical: no mobile GPU delegate; ~3.6 GB model + x86 CPU (Est) | Real GPU numbers (target) |
 | Speed of loop | Fast, no network dependency | Depends on tailnet path. Pushing the 3.65 GB model over a DERP relay may be slow (one-time) |
-| Human needed | None | One-time H1–H4, H7 |
+| Human needed | None | One-time H1–H4 (H7 resolved) |
 
 ## 7. Useful adb commands (all from the box)
 

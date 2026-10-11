@@ -16,6 +16,7 @@ import com.meta.wearable.dat.core.voiceinvocations.startVoiceInvocationsStream
 import com.meta.wearable.dat.core.voiceinvocations.types.actions.LaunchApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import glance.app.vlm.VlmFactory
 
 /**
  * Phone-side console + wiring. Debug builds: Mock Device Kit RBD auto-starts (no glasses, no registration).
@@ -54,8 +55,13 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.Default) {
             try {
                 val selector = dev.prepareDevice() ?: AutoDeviceSelector(filter = { it.isDisplayCapable() })
-                GlanceGraph.start(applicationContext, lifecycleScope, selector)
-                setStatus("Loop running. Debug: adb forward tcp:9000 tcp:9000 → http://127.0.0.1:9000/")
+                // Debug builds only: `am start … --es vlm real|stub` overrides BuildConfig.VLM_MODE.
+                val override = if (BuildConfig.DEBUG) intent?.getStringExtra("vlm") else null
+                setStatus("Loading VLM…")
+                val vlm = VlmFactory.build(applicationContext, override)
+                GlanceGraph.vlmInfo = vlm.decision.reason
+                GlanceGraph.start(applicationContext, lifecycleScope, selector, vlm = vlm.engine)
+                setStatus("Loop running · VLM ${vlm.decision.mode}: ${vlm.decision.reason}")
             } catch (e: Throwable) {
                 Log.e("Glance", "start failed", e); setStatus("Start failed: ${e.message}")
             }

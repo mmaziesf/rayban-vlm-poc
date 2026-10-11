@@ -124,6 +124,27 @@ fun main() {
     check("buffer chip", BufferStatus(true, 2, 300).chip() == "Live 2 fps · 0.3 s" && BufferStatus(false, 2, null).chip() == "Camera off")
     check("MealParser rejects garbage", MealParser.parse("no json here", 0, 0) == null)
 
+
+    // --- VlmSelection (M1c stub vs real) ---
+    run {
+        val ok = VlmSelection.Candidate("/m/gemma.litertlm", true, 100)
+        val missing = VlmSelection.Candidate("/x/gemma.litertlm", false, 0)
+        val big = 8L shl 30
+        check("vlm: stub by default", VlmSelection.decide("stub", null, listOf(ok), 100, big).mode == VlmSelection.Mode.STUB)
+        val r = VlmSelection.decide("real", null, listOf(missing, ok), 100, big)
+        check("vlm: real when model present", r.mode == VlmSelection.Mode.REAL && r.modelPath == "/m/gemma.litertlm", r)
+        check("vlm: override real", VlmSelection.decide("stub", "real", listOf(ok), 100, null).mode == VlmSelection.Mode.REAL)
+        check("vlm: override stub", VlmSelection.decide("real", "stub", listOf(ok), 100, null).mode == VlmSelection.Mode.STUB)
+        check("vlm: unknown override ignored", VlmSelection.decide("real", "garbage", listOf(ok), 100, null).mode == VlmSelection.Mode.REAL)
+        val nf = VlmSelection.decide("real", null, listOf(missing), 100, null)
+        check("vlm: no file → stub + reason", nf.mode == VlmSelection.Mode.STUB && nf.reason.contains("no model"), nf)
+        val part = VlmSelection.decide("real", null, listOf(ok.copy(sizeBytes = 50)), 100, null)
+        check("vlm: partial push → stub", part.mode == VlmSelection.Mode.STUB && part.reason.contains("incomplete"), part)
+        val low = VlmSelection.decide("real", null, listOf(ok), 100, 1L shl 30)
+        check("vlm: low RAM → stub", low.mode == VlmSelection.Mode.STUB && low.reason.contains("low RAM"), low)
+    }
+
     println("\n$passes passed, $failures failed")
     if (failures > 0) kotlin.system.exitProcess(1)
 }
+

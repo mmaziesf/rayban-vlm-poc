@@ -10,7 +10,10 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") } // phone + x86_64 emulator; drops 32-bit libs
         manifestPlaceholders["mwdat_application_id"] = "0"
         manifestPlaceholders["mwdat_client_token"] = "0"
+        // M1c: stub (canned, default: emulator/CI/tests) | real (LiteRT-LM Gemma 4 E4B). `-Pglance.vlm=real`
+        buildConfigField("String", "VLM_MODE", "\"${(project.findProperty("glance.vlm") ?: "stub")}\"")
     }
+    buildFeatures { buildConfig = true }
     buildTypes { debug { isMinifyEnabled = false } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }

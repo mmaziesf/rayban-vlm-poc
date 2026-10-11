@@ -21,6 +21,8 @@ object DebugBus { @Volatile var mock: MockRig? = null }
  *   (quote the whole command: adb shell re-splits argv, so --es text "what am I seeing" arrives as "what")
  *   ... --es intent describe|log                 # → bypass router
  *   ... --es text "log this meal" --ez viaMockSpeech true   # → MockSpeechKit → DAT Speech → controller (full mock path)
+ *   ... --ez heyMeta true                         # → MockVoiceInvocationKit.simulateLaunchAppAction() ("Hey Meta, start Glance")
+ *   ... --es info vlm                             # → logs current VLM selection (stub/real + reason)
  *
  * Protected by android.permission.DUMP (granted to the adb shell, not to normal apps). See src/debug/AndroidManifest.xml.
  * Results appear in logcat: tag GlanceHud (one line per HUD state), tag GlanceDebug (receiver).
@@ -32,6 +34,10 @@ class DebugCommandReceiver : BroadcastReceiver() {
         val text = intent.getStringExtra("text")
         val which = intent.getStringExtra("intent")
         val viaMock = intent.getBooleanExtra("viaMockSpeech", false)
+        if (intent.getBooleanExtra("heyMeta", false)) {   // no controller needed: tests the invocation path itself
+            Log.i("GlanceDebug", "heyMeta invocation=${DebugBus.mock?.heyMetaStartGlance() ?: "no mock"}"); return
+        }
+        if (intent.getStringExtra("info") == "vlm") { Log.i("GlanceDebug", "vlm=${GlanceGraph.vlmInfo}"); return }
         val c = GlanceGraph.controller
         Log.i("GlanceDebug", "cmd text=$text intent=$which viaMockSpeech=$viaMock controller=${c != null}")
         if (c == null) { Log.w("GlanceDebug", "loop not started — open the app first"); return }
