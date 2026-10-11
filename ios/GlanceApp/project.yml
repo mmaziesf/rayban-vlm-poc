@@ -9,7 +9,8 @@ targets:
     type: application
     platform: iOS
     sources: [Sources, Debug, Resources]   # Debug/ is #if DEBUG; TODO: exclude Resources/mock_* from Release
-    info: { path: Info.plist }
+    # NOT `info:` + path: XcodeGen REWRITES that file with ~8 default keys (+ `properties`), silently dropping MWDAT,
+    # URL scheme, Bonjour/LocalNetwork/Bluetooth keys and background modes from the built app. Use the plist as-is.
     # Same entitlement Meta's DisplayAccess/CameraAccess samples ship (we had none). Attempt for the mock link that never
     # leaves disconnected/undefined (runs 38112910442, 38113596903).
     entitlements:
@@ -23,6 +24,7 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         DEVELOPMENT_TEAM: ""
+        INFOPLIST_FILE: Info.plist
     dependencies:
       - package: GlanceCore
       - { package: MWDAT, product: MWDATCore }

@@ -1,4 +1,4 @@
-# Mock link bisect (CI only): identical source; variants differ in linked DAT products or bundle id. See docs/IOS_OPTIONS.md.
+# Mock link bisect (CI only). Info.plist via INFOPLIST_FILE, never `info:` (XcodeGen rewrites that file and drops MWDAT etc.): identical source; variants differ in linked DAT products or bundle id. See docs/IOS_OPTIONS.md.
 name: MockProbe
 options: { bundleIdPrefix: dev.arash.probe, deploymentTarget: { iOS: "17.2" } }
 packages:
@@ -16,9 +16,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
-    info: { path: App/Info.plist }
     entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
-    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.lite } }
+    settings: { base: { INFOPLIST_FILE: App/Info.plist, PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.lite } }
     dependencies:
       - { package: MWDAT, product: MWDATCore }
       - { package: MWDAT, product: MWDATCamera }
@@ -35,9 +34,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
-    info: { path: App/Info.plist }
     entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
-    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: com.meta.wearables.external.CameraAccess } }
+    settings: { base: { INFOPLIST_FILE: App/Info.plist, PRODUCT_BUNDLE_IDENTIFIER: com.meta.wearables.external.CameraAccess } }
     dependencies:
       - { package: MWDAT, product: MWDATCore }
       - { package: MWDAT, product: MWDATCamera }
@@ -54,9 +52,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
-    info: { path: App/Info.plist }
     entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
-    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.display } }
+    settings: { base: { INFOPLIST_FILE: App/Info.plist, PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.display } }
     dependencies:
       - { package: MWDAT, product: MWDATCore }
       - { package: MWDAT, product: MWDATCamera }
@@ -74,9 +71,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
-    info: { path: App/Info.plist }
     entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
-    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.speech } }
+    settings: { base: { INFOPLIST_FILE: App/Info.plist, PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.speech } }
     dependencies:
       - { package: MWDAT, product: MWDATCore }
       - { package: MWDAT, product: MWDATCamera }
@@ -94,9 +90,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
-    info: { path: App/Info.plist }
     entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
-    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.full } }
+    settings: { base: { INFOPLIST_FILE: App/Info.plist, PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.full } }
     dependencies:
       - { package: MWDAT, product: MWDATCore }
       - { package: MWDAT, product: MWDATCamera }
@@ -115,9 +110,8 @@ targets:
     type: application
     platform: iOS
     sources: [App]
-    info: { path: App/Info.plist }
     entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
-    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.liteearly, SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MOCK_EARLY" } }
+    settings: { base: { INFOPLIST_FILE: App/Info.plist, PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.liteearly, SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MOCK_EARLY" } }
     dependencies:
       - { package: MWDAT, product: MWDATCore }
       - { package: MWDAT, product: MWDATCamera }

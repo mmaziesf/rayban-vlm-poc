@@ -54,6 +54,10 @@ jobs:
             -destination 'generic/platform=iOS Simulator' CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES > build.log 2>&1 \
             || { echo "::group::Compile errors"; grep -E "error:|error \[" build.log | sort -u | head -80; echo "::endgroup::"; tail -40 build.log; exit 1; }
           echo "warnings: $(grep -cE "warning:" build.log || true)"; tail -3 build.log
+          # Guard: the BUILT app must carry our Info.plist (XcodeGen `info:` used to rewrite it without MWDAT etc.).
+          APP=$(find ~/Library/Developer/Xcode/DerivedData -type d -path "*Debug-iphonesimulator/GlanceApp.app" | head -1)
+          echo "built app: $APP"; plutil -p "$APP/Info.plist" | grep -E '^  "(MWDAT|CFBundleURLTypes|NSBonjourServices|NSLocalNetworkUsageDescription|UIBackgroundModes)"' || true
+          plutil -extract MWDAT.AppLinkURLScheme raw "$APP/Info.plist" || { echo "::error::built Info.plist has no MWDAT dict"; exit 1; }
       - name: "UI tests: DAT MockDeviceKit link (known blocker, non-gating — docs/IOS_OPTIONS.md)"
         id: uitests
         continue-on-error: true
@@ -155,17 +159,13 @@ jobs:
             echo "BISECT $v rc=$rc tests: $t"
             grep -aoE "PROBE_RESULT[^\"]*|(ACTIVE|SESSION) FAIL[^\"]{0,200}" $GITHUB_WORKSPACE/probe-$v.log | sort -u | head -4
           }
-          # Run 38123091432: Lite, LiteMetaId (sample bundle id), Full all fail; the sample passes with
-          # original AND renamed bundle id. The sample scheme is parallelizable=YES (tests run on a fresh
-          # "Clone 1 of <sim>"); ours ran on the booted device. Test that in both directions.
-          # CameraAccessApp touches MockDeviceKit.shared BEFORE Wearables.configure() (stored-property initializer).
-          runv ProbeLiteEarly     -project MockProbe.xcodeproj -scheme ProbeLiteEarly
-          runv ProbeLiteParallel  -project MockProbe.xcodeproj -scheme ProbeLite -parallel-testing-enabled YES
-          runv ProbeFullParallel  -project MockProbe.xcodeproj -scheme ProbeFull -parallel-testing-enabled YES
-          git clone -q --depth 1 https://github.com/facebook/meta-wearables-dat-ios $GITHUB_WORKSPACE/dat
-          CA=$GITHUB_WORKSPACE/dat/samples/CameraAccess
-          runv SampleSerial -project $CA/CameraAccess.xcodeproj -scheme CameraAccess -parallel-testing-enabled NO \
-            -only-testing:CameraAccessUITests/CameraAccessUITests/testStartSessionThenStreaming CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+          # Root cause found 2026-10-11: XcodeGen `info: {path}` rewrote App/Info.plist with only default keys (no MWDAT,
+          # URL scheme, Bonjour/LocalNetwork keys). Now INFOPLIST_FILE uses it as-is. Re-run Lite (sample linkage) + Full.
+          for v in ProbeLite ProbeFull; do
+            runv $v -project MockProbe.xcodeproj -scheme $v
+            P=$(find ~/Library/Developer/Xcode/DerivedData -type d -path "*Debug-iphonesimulator/$v.app" | head -1)
+            echo "$v built plist MWDAT: $(plutil -extract MWDAT.AppLinkURLScheme raw "$P/Info.plist" 2>&1)"
+          done
           true
       - uses: actions/upload-artifact@v4
         if: always()
