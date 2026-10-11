@@ -151,22 +151,19 @@ jobs:
               CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES > $GITHUB_WORKSPACE/probe-$v.log 2>&1
             local rc=$?
             echo "::group::$v compile errors (if any)"; grep -E "error:" $GITHUB_WORKSPACE/probe-$v.log | grep -v XCTAssert | sort -u | head -20; echo "::endgroup::"
-            local t=$(grep -aE "Test Case .*(passed|failed)" $GITHUB_WORKSPACE/probe-$v.log | sed -E "s/.*\[([^]]*)\]' (passed|failed).*/\1 \2/" | tr '\n' ';')
+            local t=$(grep -aoiE "Test case '[^']*' (passed|failed)( on '[^']*')?" $GITHUB_WORKSPACE/probe-$v.log | sort -u | tr '\n' ';')
             echo "BISECT $v rc=$rc tests: $t"
             grep -aoE "PROBE_RESULT[^\"]*|(ACTIVE|SESSION) FAIL[^\"]{0,200}" $GITHUB_WORKSPACE/probe-$v.log | sort -u | head -4
           }
-          runv ProbeLite       -project MockProbe.xcodeproj -scheme ProbeLite
-          runv ProbeLiteMetaId -project MockProbe.xcodeproj -scheme ProbeLiteMetaId
-          # Cross-check with Meta's real sample: unmodified, and with ONLY the app bundle id renamed.
+          # Run 38123091432: Lite, LiteMetaId (sample bundle id), Full all fail; the sample passes with
+          # original AND renamed bundle id. The sample scheme is parallelizable=YES (tests run on a fresh
+          # "Clone 1 of <sim>"); ours ran on the booted device. Test that in both directions.
+          runv ProbeLiteParallel  -project MockProbe.xcodeproj -scheme ProbeLite -parallel-testing-enabled YES
+          runv ProbeFullParallel  -project MockProbe.xcodeproj -scheme ProbeFull -parallel-testing-enabled YES
           git clone -q --depth 1 https://github.com/facebook/meta-wearables-dat-ios $GITHUB_WORKSPACE/dat
           CA=$GITHUB_WORKSPACE/dat/samples/CameraAccess
-          SAMPLE_ARGS="-scheme CameraAccess -only-testing:CameraAccessUITests/CameraAccessUITests/testStartSessionThenStreaming CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="
-          runv SampleOriginal -project $CA/CameraAccess.xcodeproj $SAMPLE_ARGS
-          cp -R $CA $GITHUB_WORKSPACE/CameraAccessRenamed
-          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.meta.wearables.external.CameraAccess;/PRODUCT_BUNDLE_IDENTIFIER = dev.arash.cameraaccess;/' $GITHUB_WORKSPACE/CameraAccessRenamed/CameraAccess.xcodeproj/project.pbxproj
-          grep -c "dev.arash.cameraaccess" $GITHUB_WORKSPACE/CameraAccessRenamed/CameraAccess.xcodeproj/project.pbxproj
-          runv SampleRenamedId -project $GITHUB_WORKSPACE/CameraAccessRenamed/CameraAccess.xcodeproj $SAMPLE_ARGS
-          runv ProbeFull       -project MockProbe.xcodeproj -scheme ProbeFull
+          runv SampleSerial -project $CA/CameraAccess.xcodeproj -scheme CameraAccess -parallel-testing-enabled NO \
+            -only-testing:CameraAccessUITests/CameraAccessUITests/testStartSessionThenStreaming CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
           true
       - uses: actions/upload-artifact@v4
         if: always()
