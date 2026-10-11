@@ -28,6 +28,13 @@ jobs:
         run: |
           set -o pipefail
           cd ios/GlanceApp
+          mkdir -p diag
+          # Pre-boot + stream the app's log for the whole test run (log show after the run finds no booted device).
+          xcrun simctl boot "iPhone 16" 2>/dev/null || true
+          xcrun simctl bootstatus "iPhone 16" -b >/dev/null 2>&1 || true
+          xcrun simctl spawn "iPhone 16" log stream --style compact --level debug \
+            --predicate 'process == "GlanceApp"' > diag/app.log 2>&1 &
+          echo $! > diag/logstream.pid
           xcodebuild test-without-building -project GlanceApp.xcodeproj -scheme GlanceApp \
             -destination 'platform=iOS Simulator,name=iPhone 16' -resultBundlePath UITests.xcresult \
             CODE_SIGNING_ALLOWED=NO | tee xcodebuild.log
@@ -42,16 +49,13 @@ jobs:
           grep -E "error: -\[|status was|HUD never" xcodebuild.log | head -40 || true
           echo "::endgroup::"
           echo "::group::Crash reports (GlanceApp)"
-          mkdir -p diag
           for f in $(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i glance | head -3); do
             cp ~/Library/Logs/DiagnosticReports/"$f" diag/ ; echo "=== $f"; head -c 12000 ~/Library/Logs/DiagnosticReports/"$f"; echo
           done
           echo "::endgroup::"
           echo "::group::App log (GlanceDiag / GlanceHud / faults)"
-          xcrun simctl spawn booted log show --last 30m --style compact \
-            --predicate 'process == "GlanceApp" AND (eventMessage CONTAINS "Glance" OR messageType == 16 OR messageType == 17)' \
-            > diag/app.log 2>&1 || true
-          grep -E "GlanceDiag|GlanceHud|Fatal|fault|error" diag/app.log | tail -150 || true
+          kill "$(cat diag/logstream.pid 2>/dev/null)" 2>/dev/null || true
+          grep -aE "GlanceDiag|GlanceHud|MWDAT|Fatal|assert" diag/app.log | tail -200 || true
           echo "::endgroup::"
           xcrun xcresulttool export attachments --path UITests.xcresult --output-path diag/attachments >/dev/null 2>&1 || true
       - uses: actions/upload-artifact@v4

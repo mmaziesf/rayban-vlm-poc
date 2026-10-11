@@ -3,23 +3,37 @@
 import SwiftUI
 import MWDATCore
 import GlanceCore
+#if DEBUG
+import MWDATMockDevice
+#endif
 
 @main
 struct GlanceAppMain: App {
     @StateObject private var model = GlanceModel()
-    init() {
-        do { try Wearables.configure(); NSLog("GlanceDiag: Wearables.configure ok") }
-        catch { NSLog("GlanceDiag: Wearables.configure failed: %@", "\(error)") }   // e.g. already configured
-    }
+    init() { DatBoot.configure() }
     var body: some Scene {
         WindowGroup {
             ContentView().environmentObject(model)
                 .onOpenURL { url in
                     // DAT registration callback, or debug trigger glance-debug://command?text=… (DEBUG only)
                     if model.handleDebugURL(url) { return }
-                    Task { _ = try? await Wearables.shared.handleUrl(url) }
+                    if DatBoot.ok { Task { _ = try? await Wearables.shared.handleUrl(url) } }
                 }
         }
+    }
+}
+
+/// DAT bootstrap result. CI run 38108083323 trapped (EXC_BREAKPOINT, _assertionFailure inside MWDATCore) at the first
+/// `Wearables.shared` access → configure() had failed and its error was swallowed by `try?`. Now: record the error,
+/// never touch `Wearables.shared` when unconfigured, and show the reason in the UI (UI tests print it on failure).
+enum DatBoot {
+    nonisolated(unsafe) static var error: String?
+    nonisolated(unsafe) static var ok = false
+    static func configure() {
+        do { try Wearables.configure(); ok = true }
+        catch let e as WearablesError where e == .alreadyConfigured { ok = true }
+        catch { self.error = "\(error) (\(String(reflecting: error)))"; ok = false }
+        NSLog("GlanceDiag: Wearables.configure ok=%@ error=%@", "\(ok)", error ?? "-")
     }
 }
 
@@ -27,7 +41,7 @@ struct GlanceAppMain: App {
 @MainActor
 final class GlanceModel: ObservableObject {
     @Published var hudLabel = "Ready"; @Published var hudText = ""; @Published var hudMeta = ""
-    @Published var status = "Not started"
+    @Published var status = DatBoot.ok ? "Not started" : "DAT configure failed: \(DatBoot.error ?? "?")"
     let buffer = FrameRingBuffer(capacity: 6)
     let speaker = AVSpeaker()
     let meals = InMemoryMealLog()
@@ -47,6 +61,19 @@ final class GlanceModel: ObservableObject {
 
     func start(useMock: Bool) {
         guard !started else { step("already started"); return }
+        #if DEBUG
+        if !DatBoot.ok && useMock {
+            // Meta BirdSpotter sample: "the [mock] kit configures DAT itself if nothing has". Try that, keep the original error visible.
+            let firstError = DatBoot.error ?? "?"
+            step("DAT configure failed (\(firstError)); enabling MockDeviceKit")
+            MockDeviceKit.shared.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true))
+            DatBoot.configure()
+            if DatBoot.ok { step("DAT ok via MockDeviceKit (first error: \(firstError))") }
+        }
+        #endif
+        guard DatBoot.ok else {   // touching Wearables.shared now would trap inside MWDATCore
+            step("Start failed: DAT configure: \(DatBoot.error ?? "unknown")"); hudLabel = "Error"; hudText = status; return
+        }
         started = true
         let hud = TeeHud { [weak self] s in
             let (_, body, meta) = DatHudRenderer.lines(s)

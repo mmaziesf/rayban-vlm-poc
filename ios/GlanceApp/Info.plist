@@ -5,11 +5,14 @@
   <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
   <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
   <key>CFBundleName</key><string>Glance</string>
+  <key>CFBundleDisplayName</key><string>Glance</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleDevelopmentRegion</key><string>$(DEVELOPMENT_LANGUAGE)</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>UILaunchScreen</key><dict/>
-  <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>glance</string><string>glance-debug</string></array></dict></array>
+  <key>CFBundleURLTypes</key><array><dict><key>CFBundleTypeRole</key><string>Editor</string><key>CFBundleURLName</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleURLSchemes</key><array><string>glance</string><string>glance-debug</string></array></dict></array>
   <!-- Privacy strings: iOS terminates the app (TCC) if camera/mic/speech are touched without them.
        Suspected cause of CI run 38107229753 crash on "Start (mock)" (camera stream + speech). Meta's CameraAccess sample declares mic+camera. -->
   <key>NSMicrophoneUsageDescription</key><string>Hear voice commands for Glance.</string>
@@ -23,7 +26,7 @@
   <key>MWDAT</key><dict>
     <key>AppLinkURLScheme</key><string>glance://</string>
     <key>MetaAppID</key><string>$(META_APP_ID)</string>
-    <key>ClientToken</key><string>$(META_CLIENT_TOKEN)</string>
+    <key>ClientToken</key><string>$(CLIENT_TOKEN)</string>
     <key>TeamID</key><string>$(DEVELOPMENT_TEAM)</string>
     <key>Analytics</key><dict><key>OptOut</key><true/></dict>
     <key>CrashReporting</key><dict><key>OptOut</key><true/></dict>
