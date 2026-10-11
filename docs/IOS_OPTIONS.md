@@ -2,6 +2,37 @@
 
 _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not run = 📝._
 
+## Update 2026-10-10 21:50 PT: mock-start crash fixed; UI tests still 0/4 (link never connects)
+| Run | Commit | Result | Finding |
+|---|---|---|---|
+| [38108083323](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38108083323) | 3d483b9 | build ✅, UI 0/4 | Crash report captured: `EXC_BREAKPOINT` / `_assertionFailure` inside MWDATCore at the first `Wearables.shared` access (GlanceApp.swift:63) |
+| [38109145843](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38109145843) | 45d2c7a | build ✅, UI 0/4 | Streamed app log: `Wearables.configure()` → `WearablesError.internalError`, right after Security `-34018 "Client has neither application-identifier nor keychain-access-groups entitlements"`. **Root cause:** CI built with `CODE_SIGNING_ALLOWED=NO` |
+| [38109885287](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38109885287) | a33aceb | build ❌ | Signing on → UI-test target needs `GENERATE_INFOPLIST_FILE` |
+| [38110449565](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38110449565) | c1f1f98 | build ❌ | Runner image had no "iPhone 16" simulator (infra) → CI now builds for `generic/platform=iOS Simulator` and picks or creates an iPhone by UDID |
+| [38110641886](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38110641886) | 1a8547e | build ✅, UI 0/4, **no crash** | `configure ok=true`, MDK enable + pair OK; link stays `disconnected`, compat `undefined` → clean `Start failed` on HUD |
+| [38111400016](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38111400016) | 9b6f73d | build ✅, UI 0/4 | Sample order (powerOn → don), soft wait → session `noEligibleDevice`; `Wearables.devices == []` |
+| [38112144196](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38112144196) | ad06c9a | build ✅, UI 0/4 | `devicesStream()` now subscribed: the device **is listed**, but stays `disconnected/undefined` for 10 s → `noEligibleDevice` |
+
+**Fixed:**
+1. The app no longer crashes. `DatBoot` records configure errors and guards every `Wearables.shared` access; errors show on the HUD and in the UI-test failure text.
+2. DAT configures on the Simulator, via ad-hoc "Sign to Run Locally" signing.
+3. CI is honest:
+   - pipefail on;
+   - the build is a gate;
+   - UI tests are a gate (the run is red when they fail);
+   - an always-run diagnostics step dumps the xcresult summary, crash `.ips` files and the streamed `GlanceDiag` app log;
+   - the simulator is chosen by UDID.
+
+**Remaining blocker:** the paired mock Ray-Ban Display never reaches `linkState == .connected` / `compatibility == .compatible` on the CI Simulator, so `createSession` → `noEligibleDevice`. GlanceCore stays green (10/10 Linux + macOS).
+
+**Untried candidates (next):**
+1. `powerOn → unfold → don` **with** devicesStream subscribed. BirdSpotter does unfold; run 38110641886 had unfold but no subscription.
+2. Pair off the main actor (`Task.detached`, as BirdSpotter does: "pairing is the SDK's own work"), and add `device.addLinkStateListener`.
+3. Try `.rayBanMeta` (CameraAccess) to see if it's RBD-specific.
+4. Build and run Meta's own DisplayAccess sample on the same runner as a control.
+   - If its mock also stays disconnected, the problem is the runner/Simulator (e.g. a Bluetooth/LAN-backed mock link), not our code.
+   - Fallback: run the controller-level flow with `MockDeviceKitConfig` + a fake `DeviceSelector`-free path (camera frames from the bundled clip) so the HUD/intent UI tests can pass without DAT link.
+
 ## Update 2026-10-10 20:00 PT: first macOS CI run
 - **Repo:** https://github.com/mmaziesf/rayban-vlm-poc · **run:** https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38106506396 (commit `953c3ee`; both jobs reported ✅)
 - **Actually verified by that run:**
