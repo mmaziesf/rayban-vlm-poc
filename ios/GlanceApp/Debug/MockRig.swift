@@ -21,7 +21,17 @@ final class MockRig: @unchecked Sendable {
     func startAndAwait(timeout: Duration = .seconds(15), step: (String) -> Void) async throws -> any DeviceSelector {
         let kit = MockDeviceKit.shared
         step("MDK enable")
-        if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: true, initialPermissionsGranted: true)) }
+        // Like Meta's CameraAccess UI tests (mock pair → active device passes on CI): start UNREGISTERED and go through
+        // startRegistration() (MDK's fake handler), instead of the initiallyRegistered shortcut. With the shortcut,
+        // AutoDeviceSelector never yields an active device in our app (run 38118355688).
+        if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: false, initialPermissionsGranted: true)) }
+        if Wearables.shared.registrationState != .registered {
+            step("MDK startRegistration (state=\(Wearables.shared.registrationState))")
+            do { try await Wearables.shared.startRegistration() } catch { step("WARN startRegistration: \(error)") }
+            let clock = ContinuousClock(); let deadline = clock.now.advanced(by: .seconds(10))
+            while Wearables.shared.registrationState != .registered, clock.now < deadline { try? await clock.sleep(for: .milliseconds(100)) }
+            step("MDK registration=\(Wearables.shared.registrationState)")
+        }
         // Step 2 (2026-10-10 22:20): pair + powerOn/unfold/don OFF the main actor (step 1 on main: run 38112910442, still
         // disconnected/undefined), then listen for link/compat changes instead of only polling.
         step("MDK pair metaRayBanDisplay (detached)")
