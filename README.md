@@ -120,17 +120,20 @@ xcodebuild build-for-testing -project GlanceApp.xcodeproj -scheme GlanceApp \
 ```
 Simulator builds **must be ad-hoc signed** (`CODE_SIGN_IDENTITY=-`, as above and in `project.yml`). Unsigned builds have no keychain entitlement, so `Wearables.configure()` fails.
 
+`project.yml` points at `Info.plist` with the `INFOPLIST_FILE` setting. **Don't switch it to XcodeGen's `info:` key**: that rewrites the plist with only default keys, dropping the `MWDAT` dict, URL scheme and Bonjour/Local Network keys. The DAT mock device then never connects. CI fails the build if the built app has no `MWDAT` dict.
+
 Two Debug-only ways to run without glasses:
 | Mode | How | What it exercises | Status on CI |
 |---|---|---|---|
-| **Fake glasses** | launch argument `--fake-glasses`, then tap **Start (mock)** | Real controller / intent router / frame buffer / HUD; synthetic frames, **no DAT link** | ✅ `FakeGlassesUITests` 4/4 (CI gate) |
-| **DAT Mock Device Kit** | launch with `--ui-testing` (MockDeviceKit + test server start at launch), tap **Start (mock)**, then pair from the test via `MockDeviceTestClient.pairDevice()`, like Meta's CameraAccess tests. Without the flag, Start (mock) pairs in-process | DAT session, Camera, Speech, Display with a mock Ray-Ban Display | ❌ `MockLoopUITests` 0/4 on Xcode 16.4 and 26.6: the mock device never reaches `connected` (non-gating; [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md)) |
+| **Fake glasses** | launch argument `--fake-glasses`, then tap **Start (mock)** | Real controller / intent router / frame buffer / HUD; synthetic frames, **no DAT link** | ✅ `FakeGlassesUITests` 4/4 (backup gate) |
+| **DAT Mock Device Kit** | launch with `--ui-testing` (MockDeviceKit + test server start at launch), tap **Start (mock)**, then pair from the test via `MockDeviceTestClient.pairDevice()`, like Meta's CameraAccess tests. Without the flag, Start (mock) pairs in-process | DAT session, Camera, Speech, Display with a mock Ray-Ban Display | ✅ `MockLoopUITests` 4/4 on Xcode 16.4 and 26.6 (CI gate): mock device reaches `connected/compatible` |
 
 UI tests:
 ```bash
 UDID=<simulator udid from `xcrun simctl list devices available`>
 xcodebuild test-without-building -project GlanceApp.xcodeproj -scheme GlanceApp -destination "id=$UDID" \
-  -only-testing:GlanceAppUITests/FakeGlassesUITests CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
+  -only-testing:GlanceAppUITests/MockLoopUITests -only-testing:GlanceAppUITests/FakeGlassesUITests \
+  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
 ```
 Debug triggers (the iOS equivalent of the Android broadcast):
 ```bash
@@ -149,10 +152,10 @@ xcrun simctl openurl booted 'glance-debug://command?text=log%20this%20meal&viaMo
 | Job | What | Gating |
 |---|---|---|
 | `core-linux` | GlanceCore `swift test` on Ubuntu | yes |
-| `app-simulator (xcode16)` | macos-15 / Xcode 16.4. GlanceCore, then XcodeGen + Simulator build, then `FakeGlassesUITests`. Also runs `MockLoopUITests` (DAT mock link) and a `--mock-probe` diagnostic. Uploads xcresult, crash reports and the app log | yes (except `MockLoopUITests`) |
+| `app-simulator (xcode16)` | macos-15 / Xcode 16.4. GlanceCore, then XcodeGen + Simulator build (with a check that the built Info.plist has `MWDAT`), then `MockLoopUITests` (DAT MockDeviceKit link) and `FakeGlassesUITests`, plus a `--mock-probe` diagnostic. Uploads xcresult, crash reports and the app log | yes |
 | `app-simulator (xcode26)` | Same steps on macos-26 / Xcode 26.6 | no (experimental) |
 
-Meta's own CameraAccess sample starts a mock session on macos-26 CI, but our app's mock never connects. The investigation is in [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md).
+Both legs pass the DAT mock tests 4/4 (run [38126000773](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38126000773)). The history of the former mock-link blocker is in [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md).
 
 ---
 
@@ -165,6 +168,6 @@ Meta's own CameraAccess sample starts a mock session on macos-26 CI, but our app
 | [`docs/M1C_REAL_VLM.md`](docs/M1C_REAL_VLM.md) | Real Gemma 4 E4B on Android |
 | [`docs/ON_DEVICE_DEBUGGING.md`](docs/ON_DEVICE_DEBUGGING.md), [`docs/BOT_ADB_RUNBOOK.md`](docs/BOT_ADB_RUNBOOK.md) | Phone/glasses debugging, one-time human steps |
 | [`docs/EMULATOR_ALTERNATIVES.md`](docs/EMULATOR_ALTERNATIVES.md), [`docs/K8S_ANDROID_ENV.md`](docs/K8S_ANDROID_ENV.md) | Emulator options, Kubernetes build/test stack |
-| [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md) | iOS options, CI history, mock-link blocker |
+| [`docs/IOS_OPTIONS.md`](docs/IOS_OPTIONS.md) | iOS options, CI history, mock-link root cause |
 | [`docs/OPEN_QUESTIONS.md`](docs/OPEN_QUESTIONS.md) | Open questions |
 | [`phone/README.md`](phone/README.md), [`ios/README.md`](ios/README.md), [`webapp/README.md`](webapp/README.md) | Component details |

@@ -2,6 +2,40 @@
 
 _2026-10-10 · written by the bot on the Linux box. Ran = ✅, written but not run = 📝._
 
+## Update 2026-10-11 02:15 PT: ROOT CAUSE FOUND. DAT mock link works; MockLoopUITests 4/4 and now gating
+**Root cause:** `ios/GlanceApp/project.yml` used XcodeGen's `info: { path: Info.plist }` with no `properties`.
+- XcodeGen **rewrites** that file on every generation. Its output is ~8 default keys (`CFBundle*`) plus `properties` (XcodeGen `FileWriter.writePlists`).
+- So our checked-in plist, with the `MWDAT` dict (AppLinkURLScheme…), `CFBundleURLTypes`, `NSBonjourServices`, `NSLocalNetworkUsageDescription`, Bluetooth keys and `UIBackgroundModes`, **never reached the built app**.
+- In that state DAT 1.0.1 registers, pairs and lists the mock device, but it stays `disconnected/undefined`: `AutoDeviceSelector` never yields → `noEligibleDevice`.
+- It also explains why every earlier "Info.plist experiment" changed nothing: those keys were never in the build.
+
+**Fix (commit ad3803d):**
+- `INFOPLIST_FILE: Info.plist` in target settings, so the plist is used as-is.
+- The CI build step now fails if the built `GlanceApp.app/Info.plist` has no `MWDAT.AppLinkURLScheme`.
+
+**Result, run [38126000773](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38126000773):**
+| Leg | Built plist MWDAT | MockLoopUITests (DAT mock) | FakeGlassesUITests |
+|---|---|---|---|
+| xcode16 (macos-15, Xcode 16.4) | ✅ `glance://` | ✅ **4/4** | ✅ 4/4 |
+| xcode26 (macos-26, Xcode 26.6, iOS 26.5) | ✅ | ✅ **4/4** | ✅ 4/4 |
+
+The app log shows `connecting/undefined` → **`connected/compatible`** and "Mock glasses connected". Before the fix, every run showed `disconnected/undefined`.
+
+**How it was found (bisect with a minimal probe app, `ios/MockProbe`, since removed):**
+| Run | Variant | Result |
+|---|---|---|
+| [38122289140](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38122289140) | ProbeLite = sample's products only (Core+Camera+MockDevice), sample's Info.plist *file*, Swift 6, iOS 17.2, test-client `pairDevice()` | ❌ same `disconnected/undefined` → **Display/Speech linkage ruled out** |
+| [38123091432](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38123091432) | ProbeLite with the sample's bundle id; ProbeFull; Meta CameraAccess unmodified **and** with our-style bundle id | probes ❌; sample ✅ both → **bundle id ruled out** |
+| [38124564513](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38124564513) | GlanceApp touching `MockDeviceKit.shared` before `Wearables.configure()` (as CameraAccessApp's stored property does) | ❌ 0/4 on both legs → ruled out (reverted) |
+| [38126000773](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38126000773) | Info.plist via `INFOPLIST_FILE` (GlanceApp + probes) | ✅ GlanceApp 4/4 + 4/4 on both legs. ProbeLite and ProbeFull both active + `connected/compatible`; ProbeFull session `started`; ProbeLite's session start timed out after going active (probe only, not investigated) |
+
+At that point the probes still differed from the sample only in *project generator*. Reading XcodeGen's source showed the plist rewrite.
+
+**CI now:**
+- Gate = GlanceCore + build (+ plist check) + **MockLoopUITests** + FakeGlassesUITests (backup gate, runs even if the mock step fails).
+- The `mock-bisect` job and `ios/MockProbe` are removed.
+- **Still open:** real iPhone + glasses, and the iOS on-device VLM (stub).
+
 ## Update 2026-10-11 01:50 PT: test-process pairing (CameraAccessUITests pattern) — still 0/4 on both Xcodes
 Run [https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38121054364](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38121054364), commit d39cb4c. Overall ✅ green (gate unchanged).
 

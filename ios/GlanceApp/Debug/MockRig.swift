@@ -23,7 +23,7 @@ final class MockRig: @unchecked Sendable {
         step("MDK enable")
         // Like Meta's CameraAccess UI tests (mock pair → active device passes on CI): start UNREGISTERED and go through
         // startRegistration() (MDK's fake handler), instead of the initiallyRegistered shortcut. With the shortcut,
-        // AutoDeviceSelector never yields an active device in our app (run 38118355688).
+        // (History: no active device was ever yielded while XcodeGen dropped MWDAT etc. from Info.plist; fixed 2026-10-11.)
         if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: false, initialPermissionsGranted: true)) }
         if Wearables.shared.registrationState != .registered {
             step("MDK startRegistration (state=\(Wearables.shared.registrationState))")
@@ -53,7 +53,7 @@ final class MockRig: @unchecked Sendable {
         do { let port = try await kit.startTestServer(port: 9000); step("MDK test server :\(port)") }
         catch { step("WARN test server: \(error)") }
         // Like Meta's CameraAccess sample (whose mock-pair UI test passes on CI): AutoDeviceSelector + activeDeviceStream(),
-        // instead of SpecificDeviceSelector gated on linkState (which never leaves .disconnected here; runs 38112910442…38117301155).
+        // instead of SpecificDeviceSelector gated on linkState (stuck in .disconnected while Info.plist lacked MWDAT; runs 38112910442…38117301155).
         let auto = AutoDeviceSelector(wearables: Wearables.shared)
         let active = await Self.firstActiveDevice(auto, timeout: .seconds(10))
         step("MDK auto selector active=\(active.map { "\($0)" } ?? "nil") (paired \(g.deviceIdentifier))")
@@ -75,11 +75,6 @@ final class MockRig: @unchecked Sendable {
     static let uiTesting = ProcessInfo.processInfo.arguments.contains("--ui-testing")
 
     /// Called from DatBoot right after Wearables.configure(), before any other Wearables.shared use (as CameraAccessApp.init).
-    /// Instantiate the MockDeviceKit singleton before `Wearables.configure()` (CameraAccessApp does this implicitly).
-    static func touchKitBeforeConfigure() {
-        NSLog("GlanceDiag: MockDeviceKit.shared touched before configure (isEnabled=%@)", "\(MockDeviceKit.shared.isEnabled)")
-    }
-
     static func bootForUITesting() {
         let kit = MockDeviceKit.shared
         if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: false, initialPermissionsGranted: true)) }

@@ -58,9 +58,10 @@ jobs:
           APP=$(find ~/Library/Developer/Xcode/DerivedData -type d -path "*Debug-iphonesimulator/GlanceApp.app" | head -1)
           echo "built app: $APP"; plutil -p "$APP/Info.plist" | grep -E '^  "(MWDAT|CFBundleURLTypes|NSBonjourServices|NSLocalNetworkUsageDescription|UIBackgroundModes)"' || true
           plutil -extract MWDAT.AppLinkURLScheme raw "$APP/Info.plist" || { echo "::error::built Info.plist has no MWDAT dict"; exit 1; }
-      - name: "UI tests: DAT MockDeviceKit link (known blocker, non-gating — docs/IOS_OPTIONS.md)"
+      # GATE since 2026-10-11 (run 38126000773: 4/4 on Xcode 16.4 and 26.6). Was 0/4 while XcodeGen `info:` rewrote
+      # Info.plist without MWDAT/URL scheme/Bonjour/LocalNetwork keys; the mock device then never left disconnected.
+      - name: "UI tests: DAT MockDeviceKit link (gate)"
         id: uitests
-        continue-on-error: true
         run: |
           set -o pipefail
           cd ios/GlanceApp
@@ -75,7 +76,8 @@ jobs:
           xcodebuild test-without-building -project GlanceApp.xcodeproj -scheme GlanceApp \
             -destination "id=$UDID" -resultBundlePath UITests.xcresult -only-testing:GlanceAppUITests/MockLoopUITests \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES | tee xcodebuild.log
-      - name: "UI tests: controller/HUD via --fake-glasses (gate; no DAT link)"
+      - name: "UI tests: controller/HUD via --fake-glasses (backup gate; no DAT link)"
+        if: success() || failure()   # still runs (and reports) if the DAT mock step fails
         run: |
           set -o pipefail
           cd ios/GlanceApp
@@ -125,48 +127,3 @@ jobs:
             ios/GlanceApp/diag
             ios/GlanceApp/UITests.xcresult
             ios/GlanceApp/FakeUITests.xcresult
-  mock-bisect:           # DIAGNOSTIC (non-gating): ios/MockProbe built 4× with different DAT products (Lite = sample-like
-    runs-on: macos-26    # Core+Camera+MockDevice; +Display; +Speech; Full = GlanceApp's set). Does linkage break mock connect?
-    timeout-minutes: 60
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select newest Xcode 26
-        run: X=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1); sudo xcode-select -s "$X"; xcodebuild -version
-      - run: brew install xcodegen && cd ios/MockProbe && xcodegen
-      - name: Pick + boot an iPhone simulator
-        id: sim
-        run: |
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)["devices"]
-          c=[(r,x) for r,xs in d.items() if "iOS" in r for x in xs if x["name"].startswith("iPhone")]
-          c.sort(key=lambda t:(t[0],t[1]["name"]))
-          print(c[-1][1]["udid"] if c else "")')
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$UDID" || true; xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
-      - name: Run variants
-        run: |
-          set +e   # keep going through all variants (run 38122289140 stopped after the first failure)
-          cd ios/MockProbe
-          runv() {  # $1 = label, rest = xcodebuild args
-            local v=$1; shift
-            xcodebuild test "$@" -destination "id=${{ steps.sim.outputs.udid }}" -resultBundlePath $GITHUB_WORKSPACE/$v.xcresult \
-              CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES > $GITHUB_WORKSPACE/probe-$v.log 2>&1
-            local rc=$?
-            echo "::group::$v compile errors (if any)"; grep -E "error:" $GITHUB_WORKSPACE/probe-$v.log | grep -v XCTAssert | sort -u | head -20; echo "::endgroup::"
-            local t=$(grep -aoiE "Test case '[^']*' (passed|failed)( on '[^']*')?" $GITHUB_WORKSPACE/probe-$v.log | sort -u | tr '\n' ';')
-            echo "BISECT $v rc=$rc tests: $t"
-            grep -aoE "PROBE_RESULT[^\"]*|(ACTIVE|SESSION) FAIL[^\"]{0,200}" $GITHUB_WORKSPACE/probe-$v.log | sort -u | head -4
-          }
-          # Root cause found 2026-10-11: XcodeGen `info: {path}` rewrote App/Info.plist with only default keys (no MWDAT,
-          # URL scheme, Bonjour/LocalNetwork keys). Now INFOPLIST_FILE uses it as-is. Re-run Lite (sample linkage) + Full.
-          for v in ProbeLite ProbeFull; do
-            runv $v -project MockProbe.xcodeproj -scheme $v
-            P=$(find ~/Library/Developer/Xcode/DerivedData -type d -path "*Debug-iphonesimulator/$v.app" | head -1)
-            echo "$v built plist MWDAT: $(plutil -extract MWDAT.AppLinkURLScheme raw "$P/Info.plist" 2>&1)"
-          done
-          true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with: { name: mock-bisect-logs, path: "${{ github.workspace }}/probe-*.log" }
