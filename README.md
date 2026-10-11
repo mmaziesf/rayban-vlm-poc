@@ -150,7 +150,7 @@ xcrun simctl openurl booted 'glance-debug://command?text=log%20this%20meal&viaMo
 |---|---|---|
 | `core-linux` | GlanceCore `swift test` on Ubuntu | yes |
 | `app-simulator` | GlanceCore on macOS, then XcodeGen + Simulator build, then `FakeGlassesUITests`. Also runs `MockLoopUITests` (DAT mock link) and a `--mock-probe` diagnostic. Uploads xcresult, crash reports and the app log | yes (except `MockLoopUITests`) |
-| `dat-sample-control` | On macos-26 + Xcode 26: Meta's own CameraAccess mock-pair UI test, plus our `MockLoopUITests`, to tell an environment problem from an app problem | no |
+| `dat-sample-control` | On macos-26 + Xcode 26: Meta's own CameraAccess mock-pair UI test (passes), plus a build of our app with Xcode 26 (does not compile yet) | no |
 
 ---
 

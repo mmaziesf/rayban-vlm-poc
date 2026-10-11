@@ -26,9 +26,14 @@ What the fake-glasses suite covers, and what it doesn't:
 | 3 | `--mock-probe` (DEBUG, launched by CI after the tests, not counted as tests) tried 4 variants for 8 s each: main-actor, detached + listener, **`.rayBanMeta`**, no-arg `MockDeviceKit.enable()` | 38113596903 (Diagnostics step) | all 4: `connected=false link=disconnected compat=undefined devices=1`. **Not RBD-specific, not threading** |
 | 4a | `keychain-access-groups` entitlement like Meta's samples | [38114488227](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38114488227) | no change |
 | 4b | Control: Meta's CameraAccess XCUITest on the same runner | 38114488227 | **did not compile**: the samples on `main` need **Xcode 26.4+** (`isolated deinit`); `app-simulator` uses the macos-15 default **Xcode 16.4** |
-| 4c | Control on `macos-26` + newest Xcode 26: Meta CameraAccess mock-pair test **and** our MockLoopUITests | [38115170427](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38115170427) | pending at 22:55 PT |
+| 4c | Control on `macos-26` + newest Xcode 26: Meta CameraAccess mock-pair test **and** our MockLoopUITests | [38115170427](https://github.com/mmaziesf/rayban-vlm-poc/actions/runs/38115170427) | **Meta CameraAccess `testRegisterAndPairShowsCameraScreen` ✅ PASSED** on macos-26 / Xcode 26.6 / iOS 26.5 Simulator (mock pair → active device). `testLaunchWithoutDeviceShowsHomeScreen` ❌ cold-launch timeout (infra). **Our GlanceApp did not compile with Xcode 26** (4 errors; the CI step piped through `tail -5`, so the error text was not captured) → our MockLoopUITests did not run there |
 
-**Leading hypothesis:** Xcode/SDK mismatch. DAT 1.0.1 is built for, and its samples documented against, Xcode 26.4+. We link it from Xcode 16.4. It compiles and configures, but the mock link may depend on newer runtime behaviour. Run 4c tests this directly.
+**Conclusion (2026-10-10 23:15 PT):** the DAT mock link **does work on a GitHub Simulator with Xcode 26** (Meta's own test passes). So the blocker is most likely **our toolchain**: `app-simulator` builds with Xcode 16.4, and DAT 1.0.1 + its samples target Xcode 26.4+. It is **not** our pairing order, threading, model, or entitlements: all were ruled out above. Not yet proven, because our app has not compiled under Xcode 26.
+
+**Parked next step (one CI cycle, not started):**
+1. Print the Xcode 26 compile errors (drop the `tail -5`), most likely Swift 6.2 concurrency/isolation changes, and fix them.
+2. Move `app-simulator` to `macos-26` + Xcode ≥ 26.4.
+3. If `MockLoopUITests` then pass, make them gating again.
 
 ## Update 2026-10-10 21:50 PT: mock-start crash fixed; UI tests still 0/4 (link never connects)
 | Run | Commit | Result | Finding |
