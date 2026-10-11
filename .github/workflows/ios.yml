@@ -83,6 +83,7 @@ jobs:
         if: always()
         run: |
           cd ios/GlanceApp
+          mkdir -p diag
           echo "::group::Test summary"
           xcrun xcresulttool get test-results summary --path UITests.xcresult --compact 2>&1 | tee summary.json | head -c 6000 || true
           echo; echo "::endgroup::"

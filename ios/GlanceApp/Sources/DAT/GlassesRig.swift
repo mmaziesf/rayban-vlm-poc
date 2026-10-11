@@ -95,7 +95,9 @@ final class GlassesRig: @unchecked Sendable {
             let stride = CVPixelBufferGetBytesPerRow(px); let p = base.assumingMemoryBound(to: UInt8.self)
             for y in 0..<h { for x in 0..<w {
                 let o = y * stride + x * 4
-                out[y * w + x] = UInt8((29 * Int(p[o]) + 150 * Int(p[o + 1]) + 77 * Int(p[o + 2])) >> 8)
+                // Split up: Xcode 26 (Swift 6.2) timed out type-checking the one-line form (run 38116666640).
+                let b: Int = 29 * Int(p[o]), g: Int = 150 * Int(p[o + 1]), r: Int = 77 * Int(p[o + 2])
+                out[y * w + x] = UInt8(truncatingIfNeeded: (b + g + r) >> 8)
             } }
         } else { return nil }
         let sharp = Sharpness.lumaLaplacianVariance(out, width: w, height: h)
