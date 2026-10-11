@@ -15,8 +15,9 @@ phone/
 │   │   ├── HudState.kt        Idle/Listening/Capturing/Processing/Answer/Logged/Error (+ BufferStatus chip) — mirrors webapp/
 │   │   ├── Meal.kt            Prompts + tolerant meal-JSON parser
 │   │   ├── Ports.kt           VlmEngine, Speaker, HudRenderer, MealLog, OnDemandCapture, Clock
-│   │   └── GlanceController.kt one turn: transcript → intent → frame → VLM → HUD + TTS (+ log)
-│   ├── src/test/kotlin/glance/core/CoreTests.kt   40 checks
+│   │   ├── GlanceController.kt one turn: transcript → intent → frame → VLM → HUD + TTS (+ log)
+│   │   └── HplBridge.kt       HP Lifestyle: pairing link, meal.logged event, HMAC-signed .hplevent, FileMealStore (persistent log)
+│   ├── src/test/kotlin/glance/core/CoreTests.kt + HplTests.kt   72 checks
 │   └── run-tests.sh
 └── app/                       Android (DAT 1.0.1 + Mock Device Kit + LiteRT-LM 0.18.0). Compiles on the box (D0 ✅).
     └── src/main/kotlin/glance/app/
@@ -27,14 +28,15 @@ phone/
         ├── debug/MockRig.kt   MockDeviceKit RBD + H.265 camera feed + test server :9000 + simulateTranscription + simulateLaunchAppAction
         ├── vlm/LiteRtVlmEngine.kt  Gemma 4 E4B, backend=GPU, visionBackend=GPU, Content.ImageBytes; CannedVlmEngine stand-in
         ├── audio/AndroidSpeaker.kt phone TTS → A2DP (not HFP)
-        └── log/MemoryMealLog.kt  placeholder for Room (M4)
+        └── hpl/               HP Lifestyle bridge: HplActivity (pair + review + share .hplevent), PairingStore (Keystore), MealStoreHolder
 ```
 
 Every API used in `app/` comes from Meta and Google docs pages linked in the file headers. Anything not confirmed on a reference page is marked `// VERIFY:`. Fix those first when you open the project against the real SDK.
 
 ## Run the core tests (works on any machine with JDK 17 + kotlinc)
 ```bash
-phone/core/run-tests.sh      # last run 2026-10-10 20:02 PT: 49 passed, 0 failed (incl. 8 VlmSelection)
+phone/core/run-tests.sh      # last run 2026-10-11 02:50 PT: 72 passed, 0 failed (incl. 23 HP Lifestyle bridge)
+# or: cd phone && ./gradlew :core:coreTests   (CI: .github/workflows/android.yml)
 ```
 
 ## Debug vs release layout
@@ -43,7 +45,7 @@ phone/core/run-tests.sh      # last run 2026-10-10 20:02 PT: 49 passed, 0 failed
 | `src/main` | Real loop: `GlanceGraph` (wiring), `GlassesRig`, `DatHudRenderer`, `LoggingHud`, `DevHooks` interface, `MainActivity` |
 | `src/debug` | `MockRig` (Mock Device Kit), `DevHooksFactory` (auto-pairs mock RBD + debug buttons), `DebugCommandReceiver` + its manifest, `assets/mock_feed_hevc.mp4`, `assets/mock_photo_meal.jpg` |
 | `src/release` | No-op `DevHooksFactory` → real glasses via `AutoDeviceSelector(isDisplayCapable)` |
-| `src/androidTest` | `MockLoopTest` (4 tests, Mock Device Kit end-to-end) |
+| `src/androidTest` | `MockLoopTest` (4 tests, Mock Device Kit end-to-end), `HplBridgeTest` (2 tests: Keystore pairing, FileProvider export) |
 
 `mwdat-mockdevice` is `debugImplementation` + `androidTestImplementation` only. Verified: release APK has 0 mockdevice/MockRig classes, no debug receiver, no mock assets.
 

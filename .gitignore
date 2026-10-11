@@ -16,3 +16,4 @@ tools/node_modules/
 # SDK local
 *.keystore
 *.jks
+phone/.kotlin/

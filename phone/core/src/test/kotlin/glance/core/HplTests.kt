@@ -45,6 +45,13 @@ fun hplTests(check: (String, Boolean, Any?) -> Unit) {
     check("hpl: export ≤ 1 MB per file", files.all { it.toByteArray().size <= Hpl.MAX_FILE_BYTES }, null)
     check("hpl: export one meal = one line", Hpl.exportFiles(listOf(entry), p, "UTC", "1", 1)[0].count { it == '\n' } == 1, null)
 
+    // Contract artifact for CI: python3 tools/hpl/hpl_event_sign.py verify $HPL_CONTRACT_OUT (fixture pairing)
+    System.getenv("HPL_CONTRACT_OUT")?.let { out ->
+        val sample = listOf(entry, entry.copy(tsMs = ts + 3_600_000, name = "café \"bowl\" ✓", kcal = null), entry.copy(tsMs = ts + 7_200_000, proteinG = null))
+        File(out).apply { parentFile?.mkdirs() }.writeText(Hpl.exportFiles(sample, p, "America/Los_Angeles", "ci", System.currentTimeMillis() / 1000).single())
+        check("hpl: wrote contract file", File(out).length() > 0, out)
+    }
+
     // Persistent store
     val f = File.createTempFile("meals", ".tsv").also { it.delete() }
     val s = FileMealStore(f)
