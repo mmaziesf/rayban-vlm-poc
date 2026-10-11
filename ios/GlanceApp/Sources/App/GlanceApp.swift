@@ -31,6 +31,25 @@ enum DatBoot {
         catch let e as WearablesError where e == .alreadyConfigured { ok = true }
         catch { self.error = "\(error) (\(String(reflecting: error)))"; ok = false }
         NSLog("GlanceDiag: Wearables.configure ok=%@ error=%@", "\(ok)", error ?? "-")
+        if ok { observeDevices() }
+    }
+
+    /// Like Meta's DisplayAccess/BirdSpotter samples: keep a devicesStream() subscription alive from launch.
+    /// Run 38111400016: without it `Wearables.shared.devices` stayed [] after pairing a mock → noEligibleDevice.
+    nonisolated(unsafe) static var deviceIds: [DeviceIdentifier] = []
+    nonisolated(unsafe) private static var devicesTask: Task<Void, Never>?
+    private static func observeDevices() {
+        guard devicesTask == nil else { return }
+        devicesTask = Task.detached {
+            for await ids in Wearables.shared.devicesStream() {
+                deviceIds = ids
+                let info = ids.map { id -> String in
+                    guard let d = Wearables.shared.deviceForIdentifier(id) else { return "\(id)=?" }
+                    return "\(id)=\(d.linkState)/\(d.compatibility())"
+                }
+                NSLog("GlanceDiag: devicesStream %@", info.joined(separator: ", "))
+            }
+        }
     }
 }
 

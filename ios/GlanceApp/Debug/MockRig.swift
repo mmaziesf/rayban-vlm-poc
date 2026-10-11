@@ -30,7 +30,7 @@ final class MockRig: @unchecked Sendable {
 
         // Soft readiness wait (run 38110641886: link stayed .disconnected/compat .undefined for 15 s while unsessioned).
         // CameraAccessTests just sleeps 1 s and starts a session, so the session reaching .started is the real gate.
-        let ready = await waitReady(g.deviceIdentifier, timeout: .seconds(5), step: step)
+        let ready = await waitReady(g.deviceIdentifier, timeout: .seconds(10), step: step)
         if !ready { step("WARN link not connected yet (\(linkInfo(g.deviceIdentifier))); continuing to session start") }
 
         g.services.speech.setTranscriptionSource(.injected)   // never the live phone mic in tests
@@ -45,12 +45,13 @@ final class MockRig: @unchecked Sendable {
 
     @MainActor
     private func waitReady(_ id: DeviceIdentifier, timeout: Duration, step: (String) -> Void) async -> Bool {
-        step("MDK wait connected id=\(id) reg=\(String(describing: Wearables.shared.registrationState)) devices=\(Wearables.shared.devices)")
+        step("MDK wait connected id=\(id) reg=\(String(describing: Wearables.shared.registrationState)) devices=\(Wearables.shared.devices) streamed=\(DatBoot.deviceIds)")
         let clock = ContinuousClock(); let deadline = clock.now.advanced(by: timeout)
         while clock.now < deadline {
             if let d = Wearables.shared.deviceForIdentifier(id), d.linkState == .connected, d.compatibility() == .compatible { return true }
             try? await clock.sleep(for: .milliseconds(100))
         }
+        step("MDK not ready after \(timeout): devices=\(Wearables.shared.devices) streamed=\(DatBoot.deviceIds)")
         return false
     }
 
