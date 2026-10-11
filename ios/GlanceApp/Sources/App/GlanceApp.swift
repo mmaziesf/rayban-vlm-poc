@@ -31,12 +31,16 @@ enum DatBoot {
     nonisolated(unsafe) static var error: String?
     nonisolated(unsafe) static var ok = false
     static func configure() {
+        #if DEBUG
+        // Meta's CameraAccessApp touches MockDeviceKit.shared (stored-property init) BEFORE Wearables.configure().
+        if MockRig.uiTesting { MockRig.touchKitBeforeConfigure() }
+        #endif
         do { try Wearables.configure(); ok = true }
         catch let e as WearablesError where e == .alreadyConfigured { ok = true }
         catch { self.error = "\(error) (\(String(reflecting: error)))"; ok = false }
         NSLog("GlanceDiag: Wearables.configure ok=%@ error=%@", "\(ok)", error ?? "-")
         #if DEBUG
-        // XCUITest mode, same order as Meta's CameraAccessApp.init: configure → MDK enable + test server → only then
+        // XCUITest mode, same order as Meta's CameraAccessApp.init: MDK singleton → configure → MDK enable + test server → only then
         // anything else touches Wearables.shared. The UI test pairs the device itself via MockDeviceTestClient.
         if ok, MockRig.uiTesting { MockRig.bootForUITesting() }
         #endif

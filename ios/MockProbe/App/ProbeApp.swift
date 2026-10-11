@@ -7,6 +7,15 @@ import MWDATMockDevice
 
 @main
 struct ProbeApp: App {
+    #if MOCK_EARLY
+    // Meta's CameraAccessApp builds `MockDeviceKitViewModel(mockDeviceKit: MockDeviceKit.shared)` in a stored-property
+    // initializer, i.e. BEFORE `Wearables.configure()` runs in init(). Mirror that ordering.
+    private let earlyKitEnabled: Bool = {
+        let e = MockDeviceKit.shared.isEnabled
+        NSLog("ProbeDiag: MockDeviceKit.shared touched before configure (isEnabled=%@)", "\(e)")
+        return e
+    }()
+    #endif
     init() {
         do { try Wearables.configure() } catch { NSLog("ProbeDiag: configure failed: \(error)") }
         if ProcessInfo.processInfo.arguments.contains("--ui-testing") {

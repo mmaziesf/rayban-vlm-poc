@@ -158,6 +158,8 @@ jobs:
           # Run 38123091432: Lite, LiteMetaId (sample bundle id), Full all fail; the sample passes with
           # original AND renamed bundle id. The sample scheme is parallelizable=YES (tests run on a fresh
           # "Clone 1 of <sim>"); ours ran on the booted device. Test that in both directions.
+          # CameraAccessApp touches MockDeviceKit.shared BEFORE Wearables.configure() (stored-property initializer).
+          runv ProbeLiteEarly     -project MockProbe.xcodeproj -scheme ProbeLiteEarly
           runv ProbeLiteParallel  -project MockProbe.xcodeproj -scheme ProbeLite -parallel-testing-enabled YES
           runv ProbeFullParallel  -project MockProbe.xcodeproj -scheme ProbeFull -parallel-testing-enabled YES
           git clone -q --depth 1 https://github.com/facebook/meta-wearables-dat-ios $GITHUB_WORKSPACE/dat

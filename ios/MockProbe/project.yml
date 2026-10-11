@@ -111,6 +111,25 @@ targets:
     dependencies:
       - target: ProbeFull
       - { package: MWDAT, product: MWDATMockDeviceTestClient }
+  ProbeLiteEarly:
+    type: application
+    platform: iOS
+    sources: [App]
+    info: { path: App/Info.plist }
+    entitlements: { path: App/Probe.entitlements, properties: { keychain-access-groups: ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"] } }
+    settings: { base: { PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.liteearly, SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) MOCK_EARLY" } }
+    dependencies:
+      - { package: MWDAT, product: MWDATCore }
+      - { package: MWDAT, product: MWDATCamera }
+      - { package: MWDAT, product: MWDATMockDevice }
+  ProbeLiteEarlyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    settings: { base: { GENERATE_INFOPLIST_FILE: YES, PRODUCT_BUNDLE_IDENTIFIER: dev.arash.probe.uitests.liteearly } }
+    dependencies:
+      - target: ProbeLiteEarly
+      - { package: MWDAT, product: MWDATMockDeviceTestClient }
 schemes:
   ProbeLite:
     build: { targets: { ProbeLite: all, ProbeLiteUITests: [test] } }
@@ -127,3 +146,6 @@ schemes:
   ProbeFull:
     build: { targets: { ProbeFull: all, ProbeFullUITests: [test] } }
     test: { targets: [ProbeFullUITests] }
+  ProbeLiteEarly:
+    build: { targets: { ProbeLiteEarly: all, ProbeLiteEarlyUITests: [test] } }
+    test: { targets: [ProbeLiteEarlyUITests] }

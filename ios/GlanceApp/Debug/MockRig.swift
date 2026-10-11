@@ -75,6 +75,11 @@ final class MockRig: @unchecked Sendable {
     static let uiTesting = ProcessInfo.processInfo.arguments.contains("--ui-testing")
 
     /// Called from DatBoot right after Wearables.configure(), before any other Wearables.shared use (as CameraAccessApp.init).
+    /// Instantiate the MockDeviceKit singleton before `Wearables.configure()` (CameraAccessApp does this implicitly).
+    static func touchKitBeforeConfigure() {
+        NSLog("GlanceDiag: MockDeviceKit.shared touched before configure (isEnabled=%@)", "\(MockDeviceKit.shared.isEnabled)")
+    }
+
     static func bootForUITesting() {
         let kit = MockDeviceKit.shared
         if !kit.isEnabled { kit.enable(config: MockDeviceKitConfig(initiallyRegistered: false, initialPermissionsGranted: true)) }
